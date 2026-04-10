@@ -1,9 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 fastapi
 uvicorn
 openai
 supabase
 transformers
-torch
+torch==2.1.0+cpu
 python-dotenv
 langchain
 langchain-community
