@@ -604,7 +604,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId }: Prop
                         </div>
                       )}
 
-                      <Sources sources={msg.sources} />
+                      <Sources sources={msg.sources ?? []} />
 
                       {/* ── SCORE GRID ── */}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
@@ -754,7 +754,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId }: Prop
                     </div>
                   )}
 
-                  <Sources sources={msg.sources} />
+                  <Sources sources={msg.sources ?? []} />
                 </div>
               )}
             </div>
