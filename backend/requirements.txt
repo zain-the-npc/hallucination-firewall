@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+openai
+supabase
+transformers
+torch
+python-dotenv
+langchain
+langchain-community
+duckduckgo-search
+scikit-learn
+numpy
+python-multipart

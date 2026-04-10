@@ -1,0 +1,25 @@
+# Environment files - NEVER push these
+.env
+.env.local
+.env.production
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+venv/
+env/
+
+# Next.js
+frontend/.next/
+frontend/node_modules/
+frontend/.chainlit/
+
+# Model files (too large for GitHub)
+backend/app/model/saved_model/
+
+# Misc
+.DS_Store
+backend/app/model/saved_model/
