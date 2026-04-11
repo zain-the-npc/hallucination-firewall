@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+const BASE_URL = "https://verifyai.up.railway.app";
 
 export async function askFirewall(
   question: string,
