@@ -15,8 +15,8 @@ app.add_middleware(
 )
 
 # 2. THE PATH ALIGNMENT: Matching your api.ts calls
-app.include_router(chat_router, prefix="/api")
-app.include_router(logs_router, prefix="/api")
+app.include_router(chat_router)
+app.include_router(logs_router)
 
 @app.get("/")
 def root():
