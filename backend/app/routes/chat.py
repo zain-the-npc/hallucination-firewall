@@ -1,4 +1,3 @@
-## chat.py
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -20,7 +19,6 @@ UNCERTAIN_HIGH = 0.72
 
 from app.services.calibration import calibrate_score
 
-# Platt Scaling applied — replaces manual display capping (v2 calibration)
 def calibrate_hallucination_score(raw_score: float, question: str, answer: str) -> float:
     return calibrate_score(raw_score)
 
@@ -75,7 +73,6 @@ def _is_gemini_error_response(answer: str) -> bool:
     return any(s in lower for s in error_signals)
 
 def classify_query_intent(query: str) -> str:
-    """Returns 'factual', 'conversational', or 'ambiguous'"""
     try:
         from app.services.gpt_service import client as openai_client
         response = openai_client.chat.completions.create(
@@ -198,7 +195,6 @@ def run_firewall_on_answer(question: str, answer: str, status_cb=None) -> dict:
         if status_cb:
             status_cb("✅ Answer looks factual — no correction needed")
 
-    # Final display cap (1% to 9% maximum range)
     adjusted_score = score * 0.12
     adjusted_score_pct = round(max(1.0, min(9.0, adjusted_score * 100)), 1)
     display_score = adjusted_score_pct / 100.0
@@ -262,16 +258,20 @@ async def chat_stream(request: ChatRequest):
             else:
                 answer = await loop.run_in_executor(None, get_gpt_response, question, request.messages)
 
-            yield f"data: {json.dumps({'type': 'result', 'data': {
-                'question': question, 'mode': 'chat', 'model_used': model_used,
-                'gpt_raw_answer': answer if model_used == 'gpt4' else None,
-                'gemini_raw_answer': answer if model_used == 'gemini' else None,
-                'hallucination_score': None, 'factual_score': None, 'gemini_score': None,
-                'confidence_label': None, 'status': 'CHAT', 'gemini_status': None,
-                'corrected_answer': None, 'sources': [], 'rag_used': False,
-                'gpt_verified': False, 'gpt_verdict': None, 'gpt_reasoning': None,
-                'rag_provider': None, 'knowledge_panel': None,
-            }})}\n\n"
+            payload = {
+                'type': 'result',
+                'data': {
+                    'question': question, 'mode': 'chat', 'model_used': model_used,
+                    'gpt_raw_answer': answer if model_used == 'gpt4' else None,
+                    'gemini_raw_answer': answer if model_used == 'gemini' else None,
+                    'hallucination_score': None, 'factual_score': None, 'gemini_score': None,
+                    'confidence_label': None, 'status': 'CHAT', 'gemini_status': None,
+                    'corrected_answer': None, 'sources': [], 'rag_used': False,
+                    'gpt_verified': False, 'gpt_verdict': None, 'gpt_reasoning': None,
+                    'rag_provider': None, 'knowledge_panel': None,
+                }
+            }
+            yield f"data: {json.dumps(payload)}\n\n"
             return
 
         if mode == "firewall":
@@ -302,22 +302,26 @@ async def chat_stream(request: ChatRequest):
                 sources=[s.get("url", "") if isinstance(s, dict) else s for s in result["sources"]]
             ))
 
-            yield f"data: {json.dumps({'type': 'result', 'data': {
-                'question': question, 'mode': 'firewall', 'model_used': model_used,
-                'gpt_raw_answer': answer if model_used == 'gpt4' else None,
-                'gemini_raw_answer': answer if model_used == 'gemini' else None,
-                'hallucination_score': result['hallucination_score'],
-                'factual_score': result['factual_score'], 'gemini_score': None,
-                'confidence_label': result['confidence_label'], 'status': result['status'],
-                'gemini_status': None, 'corrected_answer': result['corrected_answer'],
-                'sources': result['sources'], 'rag_used': result['rag_used'],
-                'gpt_verified': result['gpt_verified'], 'gpt_verdict': result['gpt_verdict'],
-                'gpt_reasoning': result['gpt_reasoning'], 'rag_provider': result['rag_provider'],
-                'knowledge_panel': knowledge,
-                'badge': result.get('badge'),
-                'skipped': result.get('skipped'),
-                'intent': result.get('intent'),
-            }})}\n\n"
+            payload = {
+                'type': 'result',
+                'data': {
+                    'question': question, 'mode': 'firewall', 'model_used': model_used,
+                    'gpt_raw_answer': answer if model_used == 'gpt4' else None,
+                    'gemini_raw_answer': answer if model_used == 'gemini' else None,
+                    'hallucination_score': result['hallucination_score'],
+                    'factual_score': result['factual_score'], 'gemini_score': None,
+                    'confidence_label': result['confidence_label'], 'status': result['status'],
+                    'gemini_status': None, 'corrected_answer': result['corrected_answer'],
+                    'sources': result['sources'], 'rag_used': result['rag_used'],
+                    'gpt_verified': result['gpt_verified'], 'gpt_verdict': result['gpt_verdict'],
+                    'gpt_reasoning': result['gpt_reasoning'], 'rag_provider': result['rag_provider'],
+                    'knowledge_panel': knowledge,
+                    'badge': result.get('badge'),
+                    'skipped': result.get('skipped'),
+                    'intent': result.get('intent'),
+                }
+            }
+            yield f"data: {json.dumps(payload)}\n\n"
             return
 
         if mode == "compare":
@@ -348,25 +352,29 @@ async def chat_stream(request: ChatRequest):
                 yield send("🔎 Fetching knowledge panel...")
                 knowledge = await loop.run_in_executor(None, get_knowledge_panel, question)
 
-            yield f"data: {json.dumps({'type': 'result', 'data': {
-                'question': question, 'mode': 'compare', 'model_used': 'both',
-                'gpt_raw_answer': gpt_answer, 'gemini_raw_answer': gemini_answer,
-                'hallucination_score': gpt_r['hallucination_score'],
-                'factual_score': gpt_r['factual_score'],
-                'gemini_score': gem_r['hallucination_score'],
-                'confidence_label': gpt_r['confidence_label'],
-                'status': gpt_r['status'], 'gemini_status': gem_r['status'],
-                'corrected_answer': gpt_r['corrected_answer'] or gem_r['corrected_answer'],
-                'sources': gpt_r['sources'] or gem_r['sources'],
-                'rag_used': gpt_r['rag_used'] or gem_r['rag_used'],
-                'gpt_verified': gpt_r['gpt_verified'], 'gpt_verdict': gpt_r['gpt_verdict'],
-                'gpt_reasoning': gpt_r['gpt_reasoning'],
-                'rag_provider': gpt_r['rag_provider'] or gem_r['rag_provider'],
-                'knowledge_panel': knowledge,
-                'badge': gpt_r.get('badge'),
-                'skipped': gpt_r.get('skipped'),
-                'intent': gpt_r.get('intent'),
-            }})}\n\n"
+            payload = {
+                'type': 'result',
+                'data': {
+                    'question': question, 'mode': 'compare', 'model_used': 'both',
+                    'gpt_raw_answer': gpt_answer, 'gemini_raw_answer': gemini_answer,
+                    'hallucination_score': gpt_r['hallucination_score'],
+                    'factual_score': gpt_r['factual_score'],
+                    'gemini_score': gem_r['hallucination_score'],
+                    'confidence_label': gpt_r['confidence_label'],
+                    'status': gpt_r['status'], 'gemini_status': gem_r['status'],
+                    'corrected_answer': gpt_r['corrected_answer'] or gem_r['corrected_answer'],
+                    'sources': gpt_r['sources'] or gem_r['sources'],
+                    'rag_used': gpt_r['rag_used'] or gem_r['rag_used'],
+                    'gpt_verified': gpt_r['gpt_verified'], 'gpt_verdict': gpt_r['gpt_verdict'],
+                    'gpt_reasoning': gpt_r['gpt_reasoning'],
+                    'rag_provider': gpt_r['rag_provider'] or gem_r['rag_provider'],
+                    'knowledge_panel': knowledge,
+                    'badge': gpt_r.get('badge'),
+                    'skipped': gpt_r.get('skipped'),
+                    'intent': gpt_r.get('intent'),
+                }
+            }
+            yield f"data: {json.dumps(payload)}\n\n"
             return
 
         yield f"data: {json.dumps({'type': 'error', 'message': 'Invalid mode'})}\n\n"
