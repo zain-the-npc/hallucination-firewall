@@ -7,15 +7,16 @@ app = FastAPI(title="Hallucination Firewall API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    # This allows any Vercel preview or production link to connect
+    # This remains "*" to make sure Vercel links always work
     allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
 )
 
-app.include_router(chat_router)
-app.include_router(logs_router)
+# This prefix is the "Magic Fix" that aligns with your frontend fetch calls
+app.include_router(chat_router, prefix="/api")
+app.include_router(logs_router, prefix="/api")
 
 @app.get("/")
 def root():
