@@ -10,6 +10,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "https://hallucination-firewall-vr8y-sage.vercel.app",
+        "https://hallucination-firewall-vr8y-5aqom1gt9.vercel.app",
         "https://hallucination-fir-git-25a908-zain-ul-abideens-projects-30542373.vercel.app",
         "https://hallucination-firewall-vr8y-luldtpsk6.vercel.app",
     ],
