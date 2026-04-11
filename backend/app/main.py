@@ -5,19 +5,25 @@ from app.routes.logs import router as logs_router
 
 app = FastAPI(title="Hallucination Firewall API", version="1.0.0")
 
+# 1. FIX THE CORS GATE
 app.add_middleware(
     CORSMiddleware,
-    # This remains "*" to make sure Vercel links always work
     allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
 )
 
-# This prefix is the "Magic Fix" that aligns with your frontend fetch calls
+# 2. FIX THE PATH MISMATCH
+# Your frontend is calling /api/chat. This prefix makes the backend listen for it.
 app.include_router(chat_router, prefix="/api")
 app.include_router(logs_router, prefix="/api")
 
 @app.get("/")
 def root():
     return {"status": "Hallucination Firewall is running"}
+
+# 3. ADD A HEALTH CHECK FOR THE API PATH SPECIFICALLY
+@app.get("/api")
+def api_root():
+    return {"message": "API route is active and reaching the backend"}
