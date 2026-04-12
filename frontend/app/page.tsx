@@ -10,6 +10,7 @@ export default function Home() {
   const [user, setUser]                         = useState<any>(null)
   const [loading, setLoading]                   = useState(true)
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  const [isSidebarOpen, setIsSidebarOpen]       = useState(false)
   const router                                  = useRouter()
 
   useEffect(() => {
@@ -52,21 +53,41 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-black text-white flex">
+    <main className="min-h-screen bg-background text-on-surface flex overflow-hidden">
       {user && (
-        <Sidebar
-          currentSessionId={currentSessionId}
-          onSelectSession={setCurrentSessionId}
-          onNewChat={() => setCurrentSessionId(null)}
-          userId={user.id}
-          user={user}
-        />
+        <>
+          {isSidebarOpen && (
+            <div 
+              className="fixed inset-0 bg-black/80 z-40 md:hidden" 
+              onClick={() => setIsSidebarOpen(false)} 
+            />
+          )}
+          <Sidebar
+            currentSessionId={currentSessionId}
+            onSelectSession={(id) => {
+              setCurrentSessionId(id)
+              setIsSidebarOpen(false)
+            }}
+            onNewChat={() => {
+              setCurrentSessionId(null)
+              setIsSidebarOpen(false)
+            }}
+            userId={user.id}
+            user={user}
+            isOpen={isSidebarOpen}
+            onClose={() => setIsSidebarOpen(false)}
+          />
+        </>
       )}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 h-screen overflow-hidden bg-background relative pl-0 md:pl-64">
         <ChatWindow
           sessionId={currentSessionId}
-          onSessionCreated={setCurrentSessionId}
+          onSessionCreated={(id) => {
+            setCurrentSessionId(id)
+          }}
           userId={user?.id}
+          user={user}
+          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
       </div>
     </main>

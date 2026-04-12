@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../lib/supabase"
 import { getSessions, deleteSession } from "../lib/sessions"
-import Link from "next/link"
 
 interface Session { id: string; title: string; updated_at: string; mode?: string }
 
@@ -14,18 +13,13 @@ interface Props {
   onNewChat:        () => void
   userId:           string
   user:             any
+  isOpen?:          boolean
+  onClose?:         () => void
 }
 
-const MODE_DOT: Record<string, string> = {
-  firewall: "#6366F1",
-  compare:  "#8B5CF6",
-  chat:     "#52525B",
-}
-
-export default function Sidebar({ currentSessionId, onSelectSession, onNewChat, userId, user }: Props) {
+export default function Sidebar({ currentSessionId, onSelectSession, onNewChat, userId, user, isOpen, onClose }: Props) {
   const [sessions,  setSessions]  = useState<Session[]>([])
   const [loading,   setLoading]   = useState(true)
-  const [collapsed, setCollapsed] = useState(false)
   const router = useRouter()
 
   useEffect(() => { loadSessions() }, [userId])
@@ -65,151 +59,75 @@ export default function Sidebar({ currentSessionId, onSelectSession, onNewChat, 
 
   const groups = group(sessions)
 
-  if (collapsed) return (
-    <div style={{
-      width: 52, flexShrink: 0, background: "var(--bg-2)",
-      borderRight: "1px solid var(--border)", display: "flex",
-      flexDirection: "column", alignItems: "center", paddingTop: 12, gap: 8, height: "100vh",
-    }}>
-      <button onClick={() => setCollapsed(false)} className="btn-ghost"
-        style={{ padding: 8, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <rect x="1" y="2"   width="12" height="1.5" rx=".75" fill="currentColor"/>
-          <rect x="1" y="6.25" width="12" height="1.5" rx=".75" fill="currentColor"/>
-          <rect x="1" y="10.5" width="12" height="1.5" rx=".75" fill="currentColor"/>
-        </svg>
-      </button>
-      <button onClick={onNewChat} className="btn-ghost"
-        style={{ padding: 8, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        </svg>
-      </button>
-    </div>
-  )
-
   return (
-    <div className="sidebar">
-      {/* Header */}
-      <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: 6,
-            background: "var(--accent)", display: "flex",
-            alignItems: "center", justifyContent: "center", flexShrink: 0,
-          }}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M6 1L10.5 3.5V8.5L6 11L1.5 8.5V3.5L6 1Z" stroke="#fff" strokeWidth="1.2" strokeLinejoin="round"/>
-              <circle cx="6" cy="6" r="1.5" fill="#fff"/>
-            </svg>
-          </div>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>VerifyAI</span>
+    <aside className={`fixed inset-y-0 left-0 z-50 flex flex-col py-6 px-4 h-screen w-64 bg-[#1c1b1b] transition-transform duration-300 md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <div className="flex items-center gap-3 px-2 mb-10">
+        <div className="w-8 h-8 bg-primary rounded-sm flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-on-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>shield_person</span>
         </div>
-        <button onClick={() => setCollapsed(true)} className="btn-ghost"
-          style={{ padding: "4px 8px", fontSize: 11, color: "var(--text-3)" }}>
-          ←
-        </button>
+        <div>
+          <h1 className="text-lg font-bold tracking-tight text-[#ffffff] leading-none">VerifyAI</h1>
+          <p className="text-[10px] uppercase tracking-[0.05em] text-on-surface-variant font-medium mt-1">High-Stakes Analysis</p>
+        </div>
       </div>
+      
+      <button onClick={onNewChat} className="mb-8 w-full py-2.5 px-4 bg-primary text-on-primary font-bold text-sm rounded-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] duration-150 shrink-0 border-none outline-none focus:outline-none focus:ring-0 min-h-[44px]">
+        <span className="material-symbols-outlined text-sm">add</span>
+        New Analysis
+      </button>
 
-      {/* New chat */}
-      <div style={{ padding: "10px 12px 6px" }}>
-        <button onClick={onNewChat} className="new-session-btn">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-            <path d="M6.5 1v11M1 6.5h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-          </svg>
-          New session
-        </button>
-      </div>
-
-      {/* Sessions */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 10px 10px" }}>
+      <nav className="flex-1 space-y-4 overflow-y-auto w-full pr-1 overflow-x-hidden">
         {loading ? (
-          <div style={{ padding: "8px 0" }}>
+          <div className="space-y-3 px-2">
             {[1,2,3,4].map(i => (
-              <div key={i} className="skeleton" style={{ height: 32, marginBottom: 4, borderRadius: 8 }} />
+              <div key={i} className="w-full h-8 bg-surface-container rounded-sm animate-pulse" />
             ))}
           </div>
         ) : sessions.length === 0 ? (
-          <p style={{ fontSize: 12, color: "var(--text-3)", textAlign: "center", marginTop: 24, lineHeight: 1.6 }}>
-            No sessions yet.<br/>Start a conversation.
-          </p>
+          <p className="text-[11px] text-[#c6c6c6] text-center mt-4">No analysis history found.</p>
         ) : (
           Object.entries(groups).map(([g, items]) => !items.length ? null : (
-            <div key={g} style={{ marginBottom: 10 }}>
-              <p style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.08em", textTransform: "uppercase",
-                          padding: "8px 4px 4px", fontWeight: 600 }}>
+            <div key={g} className="mb-6">
+              <p className="text-[10px] uppercase tracking-[0.05em] text-on-surface-variant font-semibold mb-2 px-2">
                 {g}
               </p>
-              {items.map(s => (
-                <div
-                  key={s.id}
-                  onClick={() => onSelectSession(s.id)}
-                  className={`sidebar-session ${currentSessionId === s.id ? "active" : ""}`}
-                >
-                  <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                    <span style={{
-                      width: 5, height: 5, borderRadius: "50%", flexShrink: 0,
-                      background: MODE_DOT[s.mode || "chat"],
-                      display: "inline-block",
-                    }} />
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{s.title}</span>
-                  </span>
-                  <button
-                    onClick={e => handleDelete(e, s.id)}
-                    style={{
-                      background: "none", border: "none", color: "var(--text-3)",
-                      cursor: "pointer", fontSize: 14, padding: "0 2px",
-                      opacity: 0, transition: "opacity 0.1s", flexShrink: 0,
-                    }}
-                    className="del-btn"
-                    onMouseOver={e => (e.currentTarget.style.color = "var(--red)")}
-                    onMouseOut={e  => (e.currentTarget.style.color = "var(--text-3)")}
+              <div className="space-y-1">
+                {items.map(s => (
+                  <div
+                    key={s.id}
+                    onClick={() => onSelectSession(s.id)}
+                    className={`flex items-center justify-between px-3 py-2 min-h-[44px] text-xs font-medium rounded-sm cursor-pointer group transition-colors duration-150 ${currentSessionId === s.id ? "bg-[#353534] text-[#ffffff]" : "text-[#c6c6c6] hover:bg-[#2a2a2a]"}`}
                   >
-                    ×
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <span className="material-symbols-outlined text-[16px] opacity-70 shrink-0" style={{ fontVariationSettings: "'FILL' 0" }}>history</span>
+                      <span className="truncate">{s.title}</span>
+                    </div>
+                    <button
+                      onClick={e => handleDelete(e, s.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400 shrink-0 ml-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">close</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           ))
         )}
-      </div>
+      </nav>
 
-      {/* Nav + user */}
-      <div style={{ borderTop: "1px solid var(--border)" }}>
-        <Link href="/dashboard" style={{ textDecoration: "none" }}>
-          <div className="sidebar-session" style={{ margin: "8px 10px", borderRadius: 8 }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <rect x="1" y="1" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                <rect x="7" y="1" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                <rect x="1" y="7" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                <rect x="7" y="7" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-              </svg>
-              Analytics
-            </span>
+      <div className="mt-auto pt-6 border-t border-outline-variant/10 shrink-0 cursor-pointer" onClick={signOut}>
+        <div className="flex items-center gap-3 px-2 hover:bg-surface-container p-2 rounded-sm transition-colors">
+          <div className="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden flex items-center justify-center text-[10px] font-bold text-on-surface border border-outline-variant/20">
+             {(user?.user_metadata?.full_name || user?.email || "U")?.[0]?.toUpperCase()}
           </div>
-        </Link>
-        <div style={{ padding: "8px 12px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: "50%",
-            background: "var(--accent-soft)", border: "1px solid rgba(99,102,241,0.2)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 12, color: "var(--accent)", fontWeight: 700, flexShrink: 0,
-          }}>
-            {(user?.user_metadata?.full_name || user?.email || "U")[0].toUpperCase()}
+          <div className="flex-1 overflow-hidden">
+            <p className="text-xs font-semibold text-on-surface truncate">{user?.user_metadata?.full_name || user?.email || "Senior Analyst"}</p>
+            <p className="text-[10px] text-on-surface-variant truncate">Enterprise Tier · Logout</p>
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 12, color: "var(--text-1)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {user?.user_metadata?.full_name || "User"}
-            </p>
-          </div>
-          <button onClick={signOut} className="btn-ghost"
-            style={{ padding: "4px 6px", fontSize: 12, color: "var(--text-3)" }}
-            title="Sign out">⏻</button>
+          <span className="material-symbols-outlined text-on-surface-variant text-sm">logout</span>
         </div>
       </div>
-
-      <style>{`.sidebar-session:hover .del-btn, .sidebar-session.active .del-btn { opacity: 1 !important; }`}</style>
-    </div>
+    </aside>
   )
 }

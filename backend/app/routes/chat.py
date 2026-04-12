@@ -251,7 +251,7 @@ async def chat_stream(request: ChatRequest):
         yield send("🚀 Processing your question...")
 
         if mode == "chat":
-            model_name = "Gemini" if model_used == "gemini" else "GPT-4"
+            model_name = "Groq" if model_used == "gemini" else "GPT-4"
             yield send(f"🤖 Getting answer from {model_name}...")
             if model_used == "gemini":
                 answer = await loop.run_in_executor(None, get_gemini_response, question, request.messages)
@@ -275,7 +275,7 @@ async def chat_stream(request: ChatRequest):
             return
 
         if mode == "firewall":
-            model_name = "Gemini" if model_used == "gemini" else "GPT-4"
+            model_name = "Groq" if model_used == "gemini" else "GPT-4"
             yield send(f"🤖 Getting answer from {model_name}...")
             if model_used == "gemini":
                 answer = await loop.run_in_executor(None, get_gemini_response, question, request.messages)
@@ -328,7 +328,7 @@ async def chat_stream(request: ChatRequest):
             yield send("🤖 Getting GPT-4 answer...")
             gpt_answer = await loop.run_in_executor(None, get_gpt_response, question, request.messages)
 
-            yield send("🤖 Getting Gemini answer...")
+            yield send("🤖 Getting Groq answer...")
             gemini_answer = await loop.run_in_executor(None, get_gemini_response, question, request.messages)
 
             yield send("🛡️ Scoring GPT-4...")
@@ -339,7 +339,7 @@ async def chat_stream(request: ChatRequest):
             for s in gpt_p:
                 yield f"data: {json.dumps({'type': 'status', 'message': s})}\n\n"
 
-            yield send("⚖️ Scoring Gemini...")
+            yield send("⚖️ Scoring Groq...")
             gem_p  = []
             gem_r  = await loop.run_in_executor(
                 None, run_firewall_on_answer, question, gemini_answer, lambda m: gem_p.append(m)

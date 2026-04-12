@@ -481,3 +481,7 @@ body {
   color: var(--text-1);
   border-bottom-color: var(--accent);
 }
+
+.bg-obsidian-gradient {
+    background: radial-gradient(circle at top left, #11192e 0%, #070d1f 60%, #000000 100%);
+}

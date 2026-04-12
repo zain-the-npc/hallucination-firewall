@@ -33,6 +33,7 @@ interface Message {
   mode?:                Mode
   model_used?:          string
   knowledge_panel?:     any
+  intent?:              string | null
   timestamp:            string
 }
 
@@ -40,12 +41,14 @@ interface Props {
   sessionId:        string | null
   onSessionCreated: (id: string) => void
   userId:           string
+  user?:            any
+  onToggleSidebar?: () => void
 }
 
 const MODES = [
   { id: "chat"     as Mode, label: "Quick Answer",     desc: "Fast AI responses"              },
   { id: "firewall" as Mode, label: "Verified Research", desc: "Full fact-check pipeline"       },
-  { id: "compare"  as Mode, label: "Model Comparison",  desc: "GPT-4 vs Gemini, both scored"  },
+  { id: "compare"  as Mode, label: "Model Comparison",  desc: "GPT-4 vs Groq, both scored"  },
 ]
 
 const EXAMPLES = [
@@ -60,12 +63,13 @@ async function askFirewallStream(
   question: string,
   mode: string,
   model: string,
+  messages: any[],
   onStatus: (msg: string) => void
 ): Promise<any> {
   const response = await fetch("https://verifyai.up.railway.app/api/chat/stream", {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ question, mode, model }),
+    body:    JSON.stringify({ question, mode, model, messages }),
   })
 
   if (!response.ok) throw new Error(`Backend error: ${response.status}`)
@@ -104,18 +108,18 @@ async function askFirewallStream(
 }
 
 // ─── Fallback non-streaming call ─────────────────────────────────────────────
-async function askFirewallSync(question: string, mode: string, model: string): Promise<any> {
+async function askFirewallSync(question: string, mode: string, model: string, messages: any[]): Promise<any> {
   const response = await fetch("https://verifyai.up.railway.app/api/chat", {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ question, mode, model }),
+    body:    JSON.stringify({ question, mode, model, messages }),
   })
   if (!response.ok) throw new Error(`Backend error: ${response.status}`)
   return response.json()
 }
 
 
-export default function ChatWindow({ sessionId, onSessionCreated, userId }: Props) {
+export default function ChatWindow({ sessionId, onSessionCreated, userId, user, onToggleSidebar }: Props) {
   const [messages,      setMessages]      = useState<Message[]>([])
   const [question,      setQuestion]      = useState("")
   const [loading,       setLoading]       = useState(false)
@@ -158,7 +162,13 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId }: Prop
     try {
       const selectedModel = mode === "compare" ? "gpt4" : model
 
-      const data = await askFirewallStream(q, mode, selectedModel, (msg) => {
+      const historyPayload = messages.map(m => {
+        let content = m.role === "user" ? m.question 
+                    : (m.corrected_answer || (m.model_used === "gemini" ? m.gemini_raw_answer : m.gpt_raw_answer));
+        return { role: m.role, content: content || "" };
+      });
+
+      const data = await askFirewallStream(q, mode, selectedModel, historyPayload, (msg) => {
         setStatusMsg(msg)
         setStatusHistory(prev => [...prev, msg])
       })
@@ -183,6 +193,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId }: Prop
         mode:                data.mode,
         model_used:          data.model_used,
         knowledge_panel:     data.knowledge_panel,
+        intent:              data.intent,
         timestamp:           new Date().toISOString(),
       }
 
@@ -280,31 +291,21 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId }: Prop
   function LiveStatus() {
     if (!loading || !statusMsg) return null
     return (
-      <div style={{
-        display: "flex", flexDirection: "column", gap: 6,
-        padding: "12px 14px",
-        background: "rgba(59,130,246,0.04)",
-        border: "1px solid rgba(59,130,246,0.15)",
-        borderRadius: 10, marginBottom: 8,
-      }}>
+      <div className="bg-surface-container-low border border-outline-variant/10 rounded-sm mb-2 p-3 flex flex-col gap-2">
         {/* Previous steps (dimmed) */}
         {statusHistory.slice(0, -1).map((s, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div key={i} className="flex items-center gap-2">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <circle cx="6" cy="6" r="5" stroke="var(--green)" strokeWidth="1.2"/>
-              <path d="M3.5 6l1.8 1.8L8.5 4.5" stroke="var(--green)" strokeWidth="1.2" strokeLinecap="round"/>
+              <circle cx="6" cy="6" r="5" stroke="#10b981" strokeWidth="1.2"/>
+              <path d="M3.5 6l1.8 1.8L8.5 4.5" stroke="#10b981" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
-            <span style={{ fontSize: 11, color: "var(--text-3)" }}>{s}</span>
+            <span className="text-[11px] text-[#919191]">{s}</span>
           </div>
         ))}
         {/* Current step (animated) */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="anim-spin" style={{
-            width: 10, height: 10, borderRadius: "50%",
-            border: "1.5px solid var(--border)",
-            borderTopColor: "var(--accent)", display: "inline-block", flexShrink: 0,
-          }} />
-          <span style={{ fontSize: 12, color: "var(--accent)", fontWeight: 500 }}>{statusMsg}</span>
+        <div className="flex items-center gap-2">
+          <span className="anim-spin inline-block shrink-0 w-2.5 h-2.5 rounded-full border-[1.5px] border-outline-variant/30 border-t-[#ffffff]" />
+          <span className="text-[12px] text-[#ffffff] font-medium">{statusMsg}</span>
         </div>
       </div>
     )
@@ -313,427 +314,259 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId }: Prop
   const modeColor = mode === "firewall" ? "var(--accent)" : mode === "compare" ? "var(--purple)" : "var(--text-2)"
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
-
-      {/* Top bar */}
-      <div style={{
-        padding: "10px 18px", borderBottom: "1px solid var(--border)",
-        background: "var(--surface)", display: "flex",
-        alignItems: "center", gap: 12, flexShrink: 0, flexWrap: "wrap",
-      }}>
-        <div style={{
-          display: "flex", background: "var(--surface-2)",
-          border: "1px solid var(--border)", borderRadius: 9, padding: 3, gap: 2,
-        }}>
-          {MODES.map(m => (
-            <button key={m.id} onClick={() => setMode(m.id)}
-              className={`mode-tab ${mode === m.id ? (m.id === "firewall" ? "active-blue" : m.id === "compare" ? "active-purple" : "active-green") : ""}`}
-              title={m.desc}>
-              {m.label}
-            </button>
-          ))}
-        </div>
-
-        {mode !== "compare" && (
-          <div style={{
-            display: "flex", background: "var(--surface-2)",
-            border: "1px solid var(--border)", borderRadius: 9, padding: 3, gap: 2,
-          }}>
-            {(["gpt4", "gemini"] as Model[]).map(m => (
-              <button key={m} onClick={() => setModel(m)}
-                className={`mode-tab ${model === m ? "active-blue" : ""}`}>
-                {m === "gpt4" ? "GPT-4" : "Gemini"}
-              </button>
-            ))}
+    <div className="flex flex-col h-screen overflow-hidden relative font-headline bg-background text-on-surface w-full">
+      {/* TopNavBar Shell */}
+      <header className="flex items-center justify-between w-full px-4 md:pl-8 md:pr-8 h-16 sticky top-0 bg-[#131313] z-40">
+        <div className="flex items-center gap-2 md:gap-8">
+          <button 
+            onClick={onToggleSidebar} 
+            className="md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center text-[#ffffff]"
+            aria-label="Toggle Menu"
+          >
+            <span className="material-symbols-outlined">menu</span>
+          </button>
+          <div className="flex gap-4 md:gap-8">
+            <button onClick={() => {setModel("gpt4"); setMode("chat")}} className={`text-sm font-medium transition-opacity active:opacity-80 min-h-[44px] ${model === 'gpt4' && mode !== 'compare' && mode !== 'firewall' ? 'text-[#ffffff] border-b border-[#ffffff] pb-1' : 'text-[#c6c6c6] hover:text-[#ffffff]'}`}>GPT-4</button>
+            <button onClick={() => {setModel("gemini"); setMode("chat")}} className={`text-sm font-medium transition-colors active:opacity-80 min-h-[44px] ${model === 'gemini' && mode !== 'compare' && mode !== 'firewall' ? 'text-[#ffffff] border-b border-[#ffffff] pb-1' : 'text-[#c6c6c6] hover:text-[#ffffff]'}`}>Groq</button>
           </div>
-        )}
-
-        <div style={{ flex: 1 }} />
-
-        <Link href="/dashboard" style={{ textDecoration: "none" }}>
-          <button className="btn btn-ghost" style={{ fontSize: 12 }}>Analytics →</button>
-        </Link>
-      </div>
-
-      {/* Mode info bar */}
-      {mode !== "chat" && (
-        <div style={{
-          padding: "6px 18px",
-          background: mode === "firewall" ? "rgba(59,130,246,0.04)" : "rgba(167,139,250,0.04)",
-          borderBottom: "1px solid var(--border)",
-          display: "flex", alignItems: "center", gap: 8,
-        }}>
-          <span className="anim-pulse" style={{
-            width: 5, height: 5, borderRadius: "50%",
-            background: modeColor, display: "inline-block", flexShrink: 0,
-          }} />
-          <span style={{ fontSize: 11, color: modeColor }}>
-            {mode === "firewall"
-              ? `Verified Research · DistilBERT → GPT-4 verification → RAG + Serper Google Search · model: ${model === "gpt4" ? "GPT-4" : "Gemini"}`
-              : "Model Comparison · GPT-4 vs Gemini · both scored by DistilBERT"}
-          </span>
         </div>
-      )}
+        <div className="flex items-center gap-4">
+          {/* Profile and Settings buttons entirely removed */}
+        </div>
+      </header>
 
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "24px 24px 0" }}>
-
-        {messages.length === 0 && (
-          <div className="anim-in" style={{ maxWidth: 580, margin: "0 auto", paddingTop: "6vh" }}>
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: 8,
-                  background: "var(--accent)", display: "flex",
-                  alignItems: "center", justifyContent: "center",
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z" stroke="#fff" strokeWidth="1.4" strokeLinejoin="round"/>
-                    <circle cx="8" cy="8" r="2" fill="#fff"/>
-                  </svg>
+      {/* Central Content Canvas */}
+      <section className="flex-1 overflow-y-auto px-4 md:px-12 py-8 md:py-16 flex flex-col items-center custom-scroll w-full">
+        {messages.length === 0 ? (
+          <div className="w-full flex flex-col items-center">
+            <div className="w-full max-w-4xl mb-16 text-center">
+              <h2 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-on-surface mb-4">Refine your Intelligence</h2>
+              <p className="text-lg text-on-surface-variant font-normal">AI answers, human-grade verification.</p>
+            </div>
+            
+            {/* Core Feature Cards (Bento-inspired Grid) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
+              <div onClick={() => setMode("chat")} className={`bg-surface-container-low hover:bg-surface-container transition-all duration-300 p-8 flex flex-col group h-full cursor-pointer rounded-sm ${mode === 'chat' ? 'border border-[#ffffff]' : 'border border-outline-variant/10 hover:border-outline-variant/30'}`}>
+                <div className="mb-6 text-primary">
+                  <span className="material-symbols-outlined text-3xl">bolt</span>
                 </div>
-                <div>
-                  <h1 className="display" style={{ fontSize: 20, fontWeight: 600, color: "var(--text)", lineHeight: 1.2 }}>
-                    VerifyAI
-                  </h1>
-                  <p style={{ fontSize: 11, color: "var(--text-3)" }}>AI answers, human-grade verification</p>
+                <h3 className="text-xl font-bold text-on-surface mb-3">Quick Answer</h3>
+                <p className="text-on-surface-variant text-sm leading-relaxed flex-1">
+                  Instant responses for rapid verification and factual lookups. Engineered for speed without compromising core precision.
+                </p>
+                <div className="mt-6 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                  Launch <span className="material-symbols-outlined text-sm">arrow_forward</span>
                 </div>
               </div>
-
-              <p style={{ fontSize: 15, color: "var(--text-2)", lineHeight: 1.7, marginBottom: 24 }}>
-                Ask any factual question. VerifyAI retrieves an answer, runs it through a trained hallucination classifier, and automatically corrects errors with real sources.
-              </p>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 24 }}>
-                {MODES.map(m => (
-                  <div key={m.id} onClick={() => setMode(m.id)} className="card"
-                    style={{
-                      padding: "12px", cursor: "pointer", transition: "all 0.15s",
-                      borderColor: mode === m.id ? (m.id === "compare" ? "var(--purple)" : "var(--accent)") : undefined,
-                      background:  mode === m.id ? (m.id === "compare" ? "rgba(167,139,250,0.05)" : "rgba(59,130,246,0.05)") : undefined,
-                    }}
-                  >
-                    <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 3 }}>{m.label}</p>
-                    <p style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>{m.desc}</p>
-                  </div>
-                ))}
+              
+              <div onClick={() => setMode("firewall")} className={`bg-surface-container-low hover:bg-surface-container transition-all duration-300 p-8 flex flex-col group h-full cursor-pointer rounded-sm ${mode === 'firewall' ? 'border border-[#ffffff]' : 'border border-outline-variant/10 hover:border-outline-variant/30'}`}>
+                <div className="mb-6 text-primary">
+                  <span className="material-symbols-outlined text-3xl">fact_check</span>
+                </div>
+                <h3 className="text-xl font-bold text-on-surface mb-3">Verified Research</h3>
+                <p className="text-on-surface-variant text-sm leading-relaxed flex-1">
+                  Deep-dive analysis with cited sources and cross-referenced datasets for high-stakes decision making.
+                </p>
+                <div className="mt-6 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                  Launch <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                </div>
               </div>
-
-              <div>
-                <p className="label" style={{ marginBottom: 8 }}>Try in Verified Research mode</p>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {EXAMPLES.map(q => (
-                    <button key={q}
-                      onClick={() => { setMode("firewall"); setQuestion(q); inputRef.current?.focus() }}
-                      className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 10px" }}>
-                      {q}
-                    </button>
-                  ))}
+              
+              <div onClick={() => setMode("compare")} className={`bg-surface-container-low hover:bg-surface-container transition-all duration-300 p-8 flex flex-col group h-full cursor-pointer rounded-sm ${mode === 'compare' ? 'border border-[#ffffff]' : 'border border-outline-variant/10 hover:border-outline-variant/30'}`}>
+                <div className="mb-6 text-primary">
+                  <span className="material-symbols-outlined text-3xl">balance</span>
+                </div>
+                <h3 className="text-xl font-bold text-on-surface mb-3">Model Comparison</h3>
+                <p className="text-on-surface-variant text-sm leading-relaxed flex-1">
+                  Direct parallel analysis between GPT-4 and Groq. Identify delta points in logic and output consistency.
+                </p>
+                <div className="mt-6 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                  Launch <span className="material-symbols-outlined text-sm">arrow_forward</span>
                 </div>
               </div>
             </div>
           </div>
-        )}
-
-        <div style={{ maxWidth: 680, margin: "0 auto" }}>
-          {messages.map((msg, i) => (
-            <div key={i} className="anim-up" style={{ marginBottom: 20 }}>
-
-              {msg.role === "user" && (
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <div className="card" style={{ maxWidth: "72%", padding: "10px 14px", background: "var(--surface-2)" }}>
-                    <p style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.6 }}>{msg.question}</p>
-                  </div>
-                </div>
-              )}
-
-              {msg.role === "assistant" && msg.mode === "chat" && (
-                <div style={{ maxWidth: "85%" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%",
-                                   background: msg.model_used === "gemini" ? "var(--accent)" : "var(--green)",
-                                   display: "inline-block" }} />
-                    <span className="label">{msg.model_used === "gemini" ? "Gemini" : "GPT-4"}</span>
-                  </div>
-                  <p style={{ fontSize: 14, color: "var(--text-2)", lineHeight: 1.7 }}>
-                    {msg.model_used === "gemini" ? msg.gemini_raw_answer : msg.gpt_raw_answer}
-                  </p>
-                  <p style={{ fontSize: 10, color: "var(--text-3)", marginTop: 6 }}>
-                    {new Date(msg.timestamp).toLocaleTimeString()}
-                  </p>
-                </div>
-              )}
-
-              {msg.role === "assistant" && msg.mode === "firewall" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: "95%" }}>
-                  {msg.status === "SKIPPED" ? (
-                    <p style={{ fontSize: 14, color: "var(--text-2)", lineHeight: 1.7 }}>
-                      {msg.model_used === "gemini" ? msg.gemini_raw_answer : msg.gpt_raw_answer}
-                    </p>
-                  ) : (<>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <FirewallBadge status={msg.status!} />
-                      <span style={{ fontSize: 11, color: "var(--text-3)" }}>
-                        {new Date(msg.timestamp).toLocaleTimeString()}
-                      </span>
+        ) : (
+          <div className="w-full max-w-4xl mx-auto flex flex-col">
+            {messages.map((msg, i) => (
+              <div key={i} className="mb-10 anim-up">
+                {msg.role === "user" && (
+                  <div className="flex justify-end">
+                    <div className="bg-surface-bright border border-outline-variant/20 rounded-sm px-4 md:px-6 py-4 max-w-[95%] md:max-w-[80%] shadow-lg">
+                      <p className="text-sm text-on-surface leading-relaxed break-words word-break break-all min-w-0" style={{ wordBreak: 'break-word' }}>{msg.question}</p>
                     </div>
+                  </div>
+                )}
 
-                    <ConfidenceMeter score={msg.hallucination_score ?? 0} label={msg.confidence_label ?? ""} />
-
-                    <div className="card" style={{ padding: "14px" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                        <p className="label">{msg.model_used === "gemini" ? "Gemini" : "GPT-4"} · Raw Answer</p>
-                        {msg.status !== "PASSED" && msg.status !== "VERIFIED" && (
-                          <Tag label="Unverified" color="var(--amber)" />
-                        )}
-                      </div>
-                      <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.7 }}>
+                {msg.role === "assistant" && msg.mode === "chat" && (
+                  <div className="max-w-full md:max-w-[85%] mt-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className={`w-2 h-2 rounded-full ${msg.model_used === 'gemini' ? 'bg-[#c6c6c6]' : 'bg-[#ffffff]'}`}></div>
+                      <span className="text-xs uppercase tracking-widest font-bold text-on-surface-variant">{msg.model_used === "gemini" ? "Groq" : "GPT-4"}</span>
+                    </div>
+                    <div className="bg-surface-container-low border border-outline-variant/10 rounded-sm px-6 py-4 shadow-sm">
+                      <p className="text-sm text-on-surface-variant leading-relaxed whitespace-pre-wrap">
                         {msg.model_used === "gemini" ? msg.gemini_raw_answer : msg.gpt_raw_answer}
                       </p>
                     </div>
+                  </div>
+                )}
 
-                    {msg.knowledge_panel && <KnowledgePanel panel={msg.knowledge_panel} />}
-
-                    {msg.gpt_verified && msg.gpt_reasoning && (
-                      <div className="card-purple" style={{ padding: "12px 14px" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                          <p className="label" style={{ color: "var(--purple)" }}>Second Opinion · GPT-4</p>
-                          <Tag label={msg.gpt_verdict || ""} color={msg.gpt_verdict === "FACTUAL" ? "var(--green)" : "var(--red)"} />
-                        </div>
-                        <p style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.7 }}>{msg.gpt_reasoning}</p>
+                {msg.role === "assistant" && msg.mode === "firewall" && (
+                  <div className="max-w-full md:max-w-[95%] mt-6 flex flex-col gap-4">
+                    {msg.status === "SKIPPED" ? (
+                       <div className="bg-surface-container-low border border-outline-variant/10 rounded-sm px-4 md:px-6 py-4 shadow-sm overflow-hidden">
+                        <p className="text-sm text-on-surface-variant leading-relaxed break-words" style={{ wordBreak: 'break-word' }}>
+                          {msg.model_used === "gemini" ? msg.gemini_raw_answer : msg.gpt_raw_answer}
+                        </p>
                       </div>
-                    )}
-
-                    {msg.corrected_answer && (
-                      <div className="card-green" style={{ padding: "14px" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span className="anim-pulse" style={{
-                              width: 6, height: 6, borderRadius: "50%",
-                              background: "var(--green)", display: "inline-block",
-                            }} />
-                            <p className="label" style={{ color: "var(--green)" }}>Corrected Answer · RAG-Grounded</p>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-4">
+                           <FirewallBadge status={msg.status!} />
+                        </div>
+                        <ConfidenceMeter score={msg.hallucination_score ?? 0} label={msg.confidence_label ?? ""} />
+                        <div className="bg-surface-container-low border border-outline-variant/10 rounded-sm p-4 md:p-6 overflow-hidden">
+                           <div className="flex justify-between items-center mb-4">
+                             <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">{msg.model_used === "gemini" ? "Groq" : "GPT-4"} RAW</span>
+                             </div>
+                             {msg.status !== "PASSED" && msg.status !== "VERIFIED" && (
+                                <Tag label="Unverified" color="#f59e0b" />
+                             )}
+                           </div>
+                           <p className="text-sm text-on-surface-variant leading-relaxed break-words" style={{ wordBreak: 'break-word' }}>
+                             {msg.model_used === "gemini" ? msg.gemini_raw_answer : msg.gpt_raw_answer}
+                           </p>
+                        </div>
+                        {msg.knowledge_panel && <KnowledgePanel panel={msg.knowledge_panel} />}
+                        {msg.gpt_verified && msg.gpt_reasoning && (
+                          <div className="bg-surface-container border border-outline-variant/10 rounded-sm p-6">
+                            <div className="flex justify-between items-center mb-4">
+                               <p className="text-xs font-bold uppercase tracking-widest text-on-surface">GPT-4 VERIFICATION</p>
+                               <Tag label={msg.gpt_verdict || ""} color={msg.gpt_verdict === "FACTUAL" ? "#10b981" : "#ef4444"} />
+                            </div>
+                            <p className="text-sm text-on-surface-variant leading-relaxed">{msg.gpt_reasoning}</p>
                           </div>
-                          {msg.rag_provider && <Tag label={`via ${msg.rag_provider}`} color="var(--text-2)" />}
+                        )}
+                        {msg.corrected_answer && (
+                          <div className="bg-[#1c2c26] border border-[#2d4d3d] rounded-sm p-4 md:p-6 overflow-hidden">
+                             <div className="flex justify-between items-center mb-4">
+                               <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></div>
+                                  <p className="text-xs font-bold uppercase tracking-widest text-[#10b981]">RAG-GROUNDED CORRECTION</p>
+                               </div>
+                             </div>
+                             <p className="text-sm text-on-surface leading-relaxed">{msg.corrected_answer}</p>
+                             {msg.sources && msg.sources.length > 0 && <Sources sources={msg.sources ?? []} />}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider bg-surface-container border border-outline-variant/20 px-3 py-1 rounded-sm text-on-surface-variant">Intent: {msg.intent || "factual"}</span>
                         </div>
-                        <p style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.7 }}>{msg.corrected_answer}</p>
-                        {msg.sources && msg.sources.length > 0 && <Sources sources={msg.sources ?? []} />}
-                      </div>
+                      </>
                     )}
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                      <MiniScore label="Hallucination" value={`${Math.round((msg.hallucination_score ?? 0) * 100)}%`}
-                        color={(msg.hallucination_score ?? 0) >= 0.6 ? "var(--red)" : "var(--green)"} />
-                      <MiniScore label="Factual" value={`${Math.round((msg.factual_score ?? 0) * 100)}%`}
-                        color="var(--green)" />
-                      <MiniScore label="RAG Used" value={msg.rag_used ? "Yes" : "No"}
-                        color={msg.rag_used ? "var(--accent)" : "var(--text-3)"} />
-                    </div>
-                  </>)}
-                </div>
-              )}
-
-              {msg.role === "assistant" && msg.mode === "compare" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Tag label="Model Comparison" color="var(--purple)" />
-                    <span style={{ fontSize: 11, color: "var(--text-3)" }}>
-                      {new Date(msg.timestamp).toLocaleTimeString()}
-                    </span>
                   </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <div className="card" style={{ padding: 14 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)", display: "inline-block" }} />
-                          <p className="label">GPT-4</p>
+                )}
+                
+                {msg.role === "assistant" && msg.mode === "compare" && (
+                  <div className="mt-6 flex flex-col gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-surface-container border border-outline-variant/10 rounded-sm p-6">
+                        <div className="flex justify-between items-center mb-4">
+                           <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-[#10b981]"></div>
+                              <span className="text-xs font-bold uppercase tracking-widest text-on-surface">GPT-4</span>
+                           </div>
                         </div>
-                        <FirewallBadge status={msg.status || "UNKNOWN"} />
-                      </div>
-                      <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.7, marginBottom: 12 }}>
-                        {msg.gpt_raw_answer}
-                      </p>
-                      <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ fontSize: 10, color: "var(--text-3)" }}>Risk score</span>
-                          <span style={{
-                            fontSize: 10, fontFamily: "'DM Mono', monospace", fontWeight: 500,
-                            color: (msg.hallucination_score ?? 0) >= 0.6 ? "var(--red)" : "var(--green)",
-                          }}>
-                            {Math.round((msg.hallucination_score ?? 0) * 100)}%
-                          </span>
-                        </div>
-                        <div className="progress-track">
-                          <div className="progress-fill" style={{
-                            width: `${Math.round((msg.hallucination_score ?? 0) * 100)}%`,
-                            background: (msg.hallucination_score ?? 0) >= 0.6 ? "var(--red)" : "var(--green)",
-                          }} />
+                        <p className="text-sm text-on-surface-variant leading-relaxed min-h-[100px] mb-6">{msg.gpt_raw_answer}</p>
+                        <div className="border-t border-outline-variant/10 pt-4">
+                           <div className="flex justify-between text-xs font-bold font-mono mb-2">
+                              <span className="text-on-surface-variant uppercase">Risk</span>
+                              <span style={{color: (msg.hallucination_score ?? 0) >= 0.08 ? "#ef4444" : "#10b981"}}>{Number(((msg.hallucination_score ?? 0) * 100).toFixed(1))}%</span>
+                           </div>
+                           <div className="h-1 bg-surface-variant rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{width: `${Math.min((Number(((msg.hallucination_score ?? 0) * 100).toFixed(1)) / 9) * 100, 100)}%`, background: (msg.hallucination_score ?? 0) >= 0.08 ? "#ef4444" : "#10b981"}}></div>
+                           </div>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="card" style={{ padding: 14 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", display: "inline-block" }} />
-                          <p className="label">Gemini</p>
+                      
+                      <div className="bg-surface-container border border-outline-variant/10 rounded-sm p-6">
+                        <div className="flex justify-between items-center mb-4">
+                           <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-[#ffffff]"></div>
+                              <span className="text-xs font-bold uppercase tracking-widest text-on-surface">Groq</span>
+                           </div>
                         </div>
-                        <FirewallBadge status={msg.gemini_status || "UNKNOWN"} />
-                      </div>
-                      <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.7, marginBottom: 12 }}>
-                        {msg.gemini_raw_answer}
-                      </p>
-                      <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ fontSize: 10, color: "var(--text-3)" }}>Risk score</span>
-                          <span style={{
-                            fontSize: 10, fontFamily: "'DM Mono', monospace", fontWeight: 500,
-                            color: (msg.gemini_score ?? 0) >= 0.6 ? "var(--red)" : "var(--green)",
-                          }}>
-                            {Math.round((msg.gemini_score ?? 0) * 100)}%
-                          </span>
-                        </div>
-                        <div className="progress-track">
-                          <div className="progress-fill" style={{
-                            width: `${Math.round((msg.gemini_score ?? 0) * 100)}%`,
-                            background: (msg.gemini_score ?? 0) >= 0.6 ? "var(--red)" : "var(--green)",
-                          }} />
+                        <p className="text-sm text-on-surface-variant leading-relaxed min-h-[100px] mb-6">{msg.gemini_raw_answer}</p>
+                        <div className="border-t border-outline-variant/10 pt-4">
+                           <div className="flex justify-between text-xs font-bold font-mono mb-2">
+                              <span className="text-on-surface-variant uppercase">Risk</span>
+                              <span style={{color: (msg.gemini_score ?? 0) >= 0.08 ? "#ef4444" : "#10b981"}}>{Number(((msg.gemini_score ?? 0) * 100).toFixed(1))}%</span>
+                           </div>
+                           <div className="h-1 bg-surface-variant rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{width: `${Math.min((Number(((msg.gemini_score ?? 0) * 100).toFixed(1)) / 9) * 100, 100)}%`, background: (msg.gemini_score ?? 0) >= 0.08 ? "#ef4444" : "#10b981"}}></div>
+                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
+                )}
+              </div>
+            ))}
 
-                  {msg.hallucination_score != null && msg.gemini_score != null && (
-                    <div className="card" style={{
-                      padding: "10px 14px", textAlign: "center",
-                      borderColor: msg.hallucination_score < msg.gemini_score ? "rgba(34,197,94,0.25)"
-                                 : msg.gemini_score < msg.hallucination_score ? "rgba(59,130,246,0.25)"
-                                 : "var(--border)",
-                    }}>
-                      <span style={{ fontSize: 12, color: "var(--text-2)" }}>
-                        {msg.hallucination_score < msg.gemini_score
-                          ? "GPT-4 scored more factual on this question"
-                          : msg.gemini_score < msg.hallucination_score
-                          ? "Gemini scored more factual on this question"
-                          : "Both models scored equally"}
-                      </span>
-                    </div>
-                  )}
+            {loading && (
+              <div className="mb-10 pl-2">
+                <LiveStatus />
+                {!statusMsg && (
+                  <div className="flex items-center gap-3">
+                    <div className="w-4 h-4 rounded-full border-2 border-[#ffffff] border-t-transparent animate-spin"></div>
+                    <span className="text-sm text-[#ffffff] font-bold">Analysis in progress...</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {error && (
+              <div className="bg-[#93000a]/20 border border-[#93000a]/40 text-[#ffb4ab] px-6 py-4 rounded-sm text-sm mb-10">
+                {error}
+              </div>
+            )}
+            <div ref={bottomRef} className="h-40" />
+          </div>
+        )}
+      </section>
 
-                  {msg.knowledge_panel && <KnowledgePanel panel={msg.knowledge_panel} />}
-                  {msg.corrected_answer && (
-                    <div className="card-green" style={{ padding: "12px 14px" }}>
-                      <p className="label" style={{ color: "var(--green)", marginBottom: 8 }}>Grounded Answer</p>
-                      <p style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.7 }}>{msg.corrected_answer}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* Loading skeleton + live status */}
-          {loading && (
-            <div className="anim-in" style={{ marginBottom: 20 }}>
-              <LiveStatus />
-              {!statusMsg && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                  <span className="anim-spin" style={{
-                    width: 12, height: 12, borderRadius: "50%",
-                    border: `2px solid var(--border)`,
-                    borderTopColor: "var(--accent)", display: "inline-block",
-                  }} />
-                  <span style={{ fontSize: 12, color: "var(--text-3)" }}>
-                    {mode === "compare" ? "Querying both models…"
-                     : mode === "firewall" ? "Running verification pipeline…"
-                     : "Thinking…"}
-                  </span>
-                </div>
-              )}
-              {mode === "compare" ? (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {[0,1].map(i => (
-                    <div key={i} className="card" style={{ padding: 14 }}>
-                      <div className="skeleton" style={{ height: 12, width: "40%", marginBottom: 12, borderRadius: 4 }} />
-                      <div className="skeleton" style={{ height: 10, width: "100%", marginBottom: 6, borderRadius: 4 }} />
-                      <div className="skeleton" style={{ height: 10, width: "75%", borderRadius: 4 }} />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="card" style={{ padding: 14 }}>
-                  <div className="skeleton" style={{ height: 10, width: "80%", marginBottom: 8, borderRadius: 4 }} />
-                  <div className="skeleton" style={{ height: 10, width: "60%", borderRadius: 4 }} />
-                </div>
-              )}
-            </div>
-          )}
-
-          {error && (
-            <div className="card-red anim-up" style={{ padding: "10px 14px", marginBottom: 20 }}>
-              <p style={{ fontSize: 12, color: "var(--red)" }}>{error}</p>
-            </div>
-          )}
-
-          <div ref={bottomRef} style={{ height: 1 }} />
-        </div>
-      </div>
-
-      {/* Input area */}
-      <div style={{
-        flexShrink: 0, padding: "14px 24px 18px",
-        borderTop: "1px solid var(--border)",
-        background: "var(--surface)",
-      }}>
-        <div style={{ maxWidth: 680, margin: "0 auto" }}>
-          <div style={{
-            display: "flex", gap: 8, alignItems: "center",
-            background: "var(--surface-2)", border: "1px solid var(--border)",
-            borderRadius: 11, padding: "4px 4px 4px 14px",
-            transition: "border-color 0.15s",
-          }}>
-            <input
+      {/* Input Area (Fixed Bottom) */}
+      <div className="fixed bottom-0 right-0 left-0 md:left-64 px-4 md:px-12 pb-4 md:pb-10 pt-4 md:pt-10 pointer-events-none z-50 bg-[#131313] md:bg-transparent shadow-[0_-20px_20px_-10px_#131313_inset] md:shadow-[0_-50px_40px_-20px_#131313_inset]">
+        <div className="max-w-4xl mx-auto relative pointer-events-auto">
+          <div className="flex items-center bg-surface-container-lowest border-b border-outline-variant/20 focus-within:border-primary transition-colors px-4 md:px-6 py-2 md:py-4">
+            <input 
               ref={inputRef}
-              type="text"
               value={question}
               onChange={e => setQuestion(e.target.value)}
               onKeyDown={handleKey}
-              placeholder={
-                mode === "compare"   ? "Ask — GPT-4 and Gemini will both answer…" :
-                mode === "firewall"  ? "Ask a factual question to verify…" :
-                                       "Ask anything…"
-              }
-              style={{
-                flex: 1, background: "transparent", border: "none",
-                outline: "none", color: "var(--text)", fontSize: 14,
-                fontFamily: "'DM Sans', sans-serif", padding: "6px 0",
-              }}
+              className="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-on-surface-variant/40 text-sm outline-none w-full min-h-[44px]" 
+              placeholder={mode === 'firewall' ? "Analyze a complex dataset or verify a claim..." : "Analyze a complex dataset or verify a claim..."} 
+              type="text" 
             />
-            <button
-              onClick={handleSubmit}
-              disabled={loading || !question.trim()}
-              className="btn btn-primary"
-              style={{ borderRadius: 8, padding: "8px 16px", flexShrink: 0 }}
-            >
-              {loading ? (
-                <span className="anim-spin" style={{
-                  width: 12, height: 12, borderRadius: "50%",
-                  border: "2px solid rgba(255,255,255,0.3)",
-                  borderTopColor: "#fff", display: "inline-block",
-                }} />
-              ) : mode === "compare" ? "Compare" : "Send"}
-            </button>
+            <div className="flex items-center gap-2 md:gap-4 ml-2">
+              <button className="text-on-surface-variant hover:text-[#ffffff] transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
+                <span className="material-symbols-outlined text-xl">attach_file</span>
+              </button>
+              <button onClick={handleSubmit} disabled={loading || !question.trim()} className="w-11 h-11 bg-[#ffffff] text-on-primary rounded-sm flex items-center justify-center hover:opacity-90 active:scale-[0.95] transition-all disabled:opacity-50">
+                <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
+              </button>
+            </div>
           </div>
-          <p style={{ fontSize: 10, color: "var(--text-3)", textAlign: "center", marginTop: 8 }}>
-            {mode === "firewall"
-              ? "DistilBERT → GPT-4 verification → Serper Google + Wikipedia + News (parallel)"
-              : mode === "compare"
-              ? "Both models scored independently by DistilBERT (F1 0.962)"
-              : `${model === "gemini" ? "Gemini" : "GPT-4"} · no fact-checking · switch to Verified Research for verification`}
-          </p>
+          <div className="mt-4 flex justify-center">
+            <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-[0.1em] font-medium">VerifyAI can make mistakes. Verify critical information.</p>
+          </div>
         </div>
       </div>
+      <style jsx>{`
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #353534; border-radius: 4px; }
+      `}</style>
     </div>
   )
 }
