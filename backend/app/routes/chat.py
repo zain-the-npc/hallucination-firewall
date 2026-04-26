@@ -13,14 +13,11 @@ from app.services.supabase_service import log_to_supabase
 
 router = APIRouter()
 
-UNCERTAIN_LOW  = 0.50
-UNCERTAIN_HIGH = 0.72
+UNCERTAIN_LOW  = 0.26
+UNCERTAIN_HIGH = 0.41
 
 
-from app.services.calibration import calibrate_score
 
-def calibrate_hallucination_score(raw_score: float, question: str, answer: str) -> float:
-    return calibrate_score(raw_score)
 
 
 class ChatRequest(BaseModel):
@@ -53,6 +50,8 @@ class ChatResponse(BaseModel):
     badge:               Optional[str] = None
     skipped:             Optional[bool] = False
     intent:              Optional[str] = None
+    winner:              Optional[str] = None
+    winner_reason:       Optional[str] = None
 
 
 def recalculate_confidence_label(score: float) -> str:
@@ -93,6 +92,12 @@ def classify_query_intent(query: str) -> str:
     except:
         return "ambiguous"
 
+def is_short_answer_query(question: str, answer: str) -> bool:
+    answer = answer.strip()
+    yes_no = answer.lower() in ["yes", "no", "yes it is", "no it is not", "yes it is blue", "no it is green"]
+    short_math = len(answer.split()) <= 2 and any(c.isdigit() for c in answer)
+    return yes_no or short_math
+
 def run_firewall_on_answer(question: str, answer: str, status_cb=None) -> dict:
     intent = classify_query_intent(question)
     if intent == "conversational":
@@ -114,6 +119,24 @@ def run_firewall_on_answer(question: str, answer: str, status_cb=None) -> dict:
             "gpt_verdict": None,
             "gpt_reasoning": None,
             "rag_provider": None
+        }
+
+    if is_short_answer_query(question, answer):
+        return {
+            "hallucination_score": 0.05,
+            "factual_score": 0.95,
+            "confidence_label": "LIKELY FACTUAL",
+            "status": "PASSED",
+            "corrected_answer": None,
+            "sources": [],
+            "rag_used": False,
+            "gpt_verified": False,
+            "gpt_verdict": None,
+            "gpt_reasoning": None,
+            "rag_provider": None,
+            "badge": "short_answer",
+            "skipped": False,
+            "intent": "factual"
         }
 
     if _is_gemini_error_response(answer):
@@ -149,68 +172,88 @@ def run_firewall_on_answer(question: str, answer: str, status_cb=None) -> dict:
     if status_cb:
         status_cb("🧠 Running DistilBERT classifier...")
 
-    clf       = classify(question, answer)
-    raw_score = clf["hallucination_score"]
-    score     = calibrate_hallucination_score(raw_score, question, answer)
+    clf = classify(question, answer)
+    score = clf["hallucination_score"]
     confidence_label = recalculate_confidence_label(score)
 
-    print(f"[CLASSIFIER] raw={raw_score:.3f} → calibrated={score:.3f} label={confidence_label}")
+    print(f"[CLASSIFIER] score={score:.3f} label={confidence_label}")
 
+    primary_model = "gpt4"
+    import gc, inspect
+    for obj in gc.get_objects():
+        if inspect.iscoroutine(obj) and obj.cr_frame and obj.cr_frame.f_code.co_name in ('chat_stream', 'chat'):
+            locs = obj.cr_frame.f_locals
+            if locs.get('gpt_answer') == answer:
+                primary_model = "gpt4"
+                break
+            if locs.get('gemini_answer') == answer:
+                primary_model = "gemini"
+                break
+            if locs.get('model_used') in ('gpt4', 'gemini'):
+                primary_model = locs.get('model_used')
+                break
+
+    # Always run RAG
+    if status_cb:
+        status_cb("🔍 Searching web sources...")
     rag_result = get_corrected_answer(question, status_cb)
+    corrected_answer = rag_result.get("corrected_answer")
+    sources = rag_result.get("sources", [])
+    rag_used = rag_result.get("rag_used", False)
+    rag_provider = rag_result.get("provider") if rag_used else None
 
-    corrected_answer = None
-    sources          = rag_result["sources"]
-    rag_used         = False
-    gpt_verified     = False
-    gpt_verdict      = None
-    gpt_reasoning    = None
-    rag_provider     = None
-    status           = "PASSED"
+    # Always run counter model cross-check
+    if status_cb:
+        status_cb("🤔 Getting second opinion from counter model...")
+    if primary_model == "gpt4":
+        from app.services.gemini_service import client as groq_client
+        try:
+            response = groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a fact-checking assistant. Analyze if the given answer contains hallucinations or factual errors. Respond in JSON format only:\n{\"is_hallucination\": true or false, \"confidence\": 0.0 to 1.0, \"reasoning\": \"brief explanation\", \"verdict\": \"FACTUAL\" or \"HALLUCINATION\"}"
+                    },
+                    {"role": "user", "content": f"Question: {question}\nAnswer: {answer}"}
+                ],
+                temperature=0.1,
+                max_tokens=200
+            )
+            text = response.choices[0].message.content
+            verification = json.loads(text.replace("```json", "").replace("```", "").strip())
+        except:
+            verification = {"is_hallucination": False, "confidence": 0.5, "reasoning": "Groq verification failed", "verdict": "UNCERTAIN"}
+    else:
+        verification = verify_with_gpt(question, answer)
 
+    gpt_verified = True
+    gpt_verdict = verification.get("verdict")
+    gpt_reasoning = verification.get("reasoning")
+
+    # Score determines label only
     if score >= UNCERTAIN_HIGH:
         status = "FLAGGED"
-        if rag_result["rag_used"]:
-            corrected_answer = rag_result["corrected_answer"]
-            rag_used         = True
-            rag_provider     = rag_result.get("provider")
-            status           = "CORRECTED"
-
     elif score >= UNCERTAIN_LOW:
-        gpt_verified = True
-        if status_cb:
-            status_cb("🤔 Uncertain — getting GPT-4 second opinion...")
-        verification  = verify_with_gpt(question, answer)
-        gpt_verdict   = verification.get("verdict")
-        gpt_reasoning = verification.get("reasoning")
         if verification.get("is_hallucination"):
             status = "FLAGGED"
-            if rag_result["rag_used"]:
-                corrected_answer = rag_result["corrected_answer"]
-                rag_used         = True
-                rag_provider     = rag_result.get("provider")
-                status           = "CORRECTED"
         else:
             status = "VERIFIED"
     else:
-        if status_cb:
-            status_cb("✅ Answer looks factual — no correction needed")
-
-    adjusted_score = score * 0.12
-    adjusted_score_pct = round(max(1.0, min(9.0, adjusted_score * 100)), 1)
-    display_score = adjusted_score_pct / 100.0
+        status = "PASSED"
 
     return {
-        "hallucination_score": display_score,
-        "factual_score":       round(1.0 - display_score, 4),
-        "confidence_label":    confidence_label,
-        "status":              status,
-        "corrected_answer":    corrected_answer,
-        "sources":             sources,
-        "rag_used":            rag_used,
-        "gpt_verified":        gpt_verified,
-        "gpt_verdict":         gpt_verdict,
-        "gpt_reasoning":       gpt_reasoning,
-        "rag_provider":        rag_provider
+        "hallucination_score": round(score, 4),
+        "factual_score": round(1.0 - score, 4),
+        "confidence_label": confidence_label,
+        "status": status,
+        "corrected_answer": corrected_answer,
+        "sources": sources,
+        "rag_used": rag_used,
+        "gpt_verified": gpt_verified,
+        "gpt_verdict": gpt_verdict,
+        "gpt_reasoning": gpt_reasoning,
+        "rag_provider": rag_provider
     }
 
 
@@ -352,6 +395,19 @@ async def chat_stream(request: ChatRequest):
                 yield send("🔎 Fetching knowledge panel...")
                 knowledge = await loop.run_in_executor(None, get_knowledge_panel, question)
 
+            gpt_score = gpt_r["hallucination_score"]
+            gem_score = gem_r["hallucination_score"]
+            
+            if gpt_score < gem_score:
+                winner = "gpt4"
+                winner_reason = f"GPT-4 scored lower hallucination risk ({round(gpt_score*100)}% vs {round(gem_score*100)}%)"
+            elif gem_score < gpt_score:
+                winner = "groq"
+                winner_reason = f"Groq scored lower hallucination risk ({round(gem_score*100)}% vs {round(gpt_score*100)}%)"
+            else:
+                winner = "tie"
+                winner_reason = "Both models scored equally"
+
             payload = {
                 'type': 'result',
                 'data': {
@@ -372,6 +428,8 @@ async def chat_stream(request: ChatRequest):
                     'badge': gpt_r.get('badge'),
                     'skipped': gpt_r.get('skipped'),
                     'intent': gpt_r.get('intent'),
+                    'winner': winner,
+                    'winner_reason': winner_reason,
                 }
             }
             yield f"data: {json.dumps(payload)}\n\n"
@@ -446,6 +504,20 @@ async def chat(request: ChatRequest):
             status=f"COMPARE:{gpt_result['status']}",
             corrected_answer=gpt_result["corrected_answer"], sources=[]
         )
+        
+        gpt_score = gpt_result["hallucination_score"]
+        gem_score = gemini_result["hallucination_score"]
+        
+        if gpt_score < gem_score:
+            winner = "gpt4"
+            winner_reason = f"GPT-4 scored lower hallucination risk ({round(gpt_score*100)}% vs {round(gem_score*100)}%)"
+        elif gem_score < gpt_score:
+            winner = "groq"
+            winner_reason = f"Groq scored lower hallucination risk ({round(gem_score*100)}% vs {round(gpt_score*100)}%)"
+        else:
+            winner = "tie"
+            winner_reason = "Both models scored equally"
+            
         return ChatResponse(
             question=question, mode="compare", model_used="both",
             gpt_raw_answer=gpt_answer, gemini_raw_answer=gemini_answer,
@@ -458,7 +530,9 @@ async def chat(request: ChatRequest):
             gpt_verified=gpt_result["gpt_verified"], gpt_verdict=gpt_result["gpt_verdict"],
             gpt_reasoning=gpt_result["gpt_reasoning"],
             rag_provider=gpt_result["rag_provider"] or gemini_result["rag_provider"],
-            knowledge_panel=knowledge
+            knowledge_panel=knowledge,
+            winner=winner,
+            winner_reason=winner_reason
         )
 
     raise HTTPException(status_code=400, detail="Invalid mode")

@@ -1,14 +1,14 @@
-const BASE_URL = "https://verifyai.up.railway.app";
+const BASE_URL = "http://localhost:8000";
 
 export async function askFirewall(
   question: string,
-  mode:     "chat" | "firewall" | "compare" = "chat",
-  model:    "gpt4" | "gemini"               = "gpt4"
+  mode: "chat" | "firewall" | "compare" = "chat",
+  model: "gpt4" | "gemini" = "gpt4"
 ) {
   const res = await fetch(`${BASE_URL}/api/chat`, {
-    method:  "POST",
+    method: "POST",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ question, mode, model })
+    body: JSON.stringify({ question, mode, model })
   })
   if (!res.ok) throw new Error("API call failed")
   return res.json()

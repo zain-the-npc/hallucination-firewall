@@ -60,8 +60,8 @@ export default function Sidebar({ currentSessionId, onSelectSession, onNewChat, 
   const groups = group(sessions)
 
   return (
-    <aside className={`fixed inset-y-0 left-0 z-50 flex flex-col py-6 px-4 h-screen w-64 bg-[#1c1b1b] transition-transform duration-300 md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}>
-      <div className="flex items-center gap-3 px-2 mb-10">
+    <aside className={`fixed inset-y-0 left-0 z-50 flex flex-col pt-6 pb-36 px-4 w-64 bg-[#1c1b1b] transition-transform duration-300 md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`} style={{ height: '100dvh' }}>
+      <div className="flex items-center gap-3 px-2 mb-10 shrink-0">
         <div className="w-8 h-8 bg-primary rounded-sm flex items-center justify-center shrink-0">
           <span className="material-symbols-outlined text-on-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>shield_person</span>
         </div>
@@ -70,13 +70,13 @@ export default function Sidebar({ currentSessionId, onSelectSession, onNewChat, 
           <p className="text-[10px] uppercase tracking-[0.05em] text-on-surface-variant font-medium mt-1">High-Stakes Analysis</p>
         </div>
       </div>
-      
+
       <button onClick={onNewChat} className="mb-8 w-full py-2.5 px-4 bg-primary text-on-primary font-bold text-sm rounded-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] duration-150 shrink-0 border-none outline-none focus:outline-none focus:ring-0 min-h-[44px]">
         <span className="material-symbols-outlined text-sm">add</span>
         New Analysis
       </button>
 
-      <nav className="flex-1 space-y-4 overflow-y-auto w-full pr-1 overflow-x-hidden">
+      <nav className="w-full pr-1 overflow-x-hidden overflow-y-auto shrink-1" style={{ flex: '1 1 0', minHeight: 0 }}>
         {loading ? (
           <div className="space-y-3 px-2">
             {[1,2,3,4].map(i => (
@@ -116,10 +116,10 @@ export default function Sidebar({ currentSessionId, onSelectSession, onNewChat, 
         )}
       </nav>
 
-      <div className="mt-auto pt-6 border-t border-outline-variant/10 shrink-0 cursor-pointer" onClick={signOut}>
+      <div className="pt-4 border-t border-outline-variant/10 shrink-0 cursor-pointer" onClick={signOut}>
         <div className="flex items-center gap-3 px-2 hover:bg-surface-container p-2 rounded-sm transition-colors">
           <div className="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden flex items-center justify-center text-[10px] font-bold text-on-surface border border-outline-variant/20">
-             {(user?.user_metadata?.full_name || user?.email || "U")?.[0]?.toUpperCase()}
+            {(user?.user_metadata?.full_name || user?.email || "U")?.[0]?.toUpperCase()}
           </div>
           <div className="flex-1 overflow-hidden">
             <p className="text-xs font-semibold text-on-surface truncate">{user?.user_metadata?.full_name || user?.email || "Senior Analyst"}</p>

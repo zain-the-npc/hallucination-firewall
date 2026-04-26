@@ -7,7 +7,7 @@ export default function ConfidenceMeter({ score, label }: Props) {
   const pctNum = Number((score * 100).toFixed(1))
   const [width, setWidth] = useState(0)
 
-  useEffect(() => { setWidth(Math.min((pctNum / 9) * 100, 100)) }, [pctNum])
+  useEffect(() => { setWidth(Math.round(score * 100)) }, [score])
 
   const tier =
     score >= 0.08 ? { color: "#EF4444", name: "High Risk"   } :
@@ -34,9 +34,12 @@ export default function ConfidenceMeter({ score, label }: Props) {
         <div className="risk-fill" style={{ width: `${width}%` }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-        <span style={{ fontSize: 10, color: "var(--text-3)" }}>Factual</span>
-        <span style={{ fontSize: 10, color: "var(--text-3)" }}>Hallucinated</span>
+        <span style={{ fontSize: 10, color: "var(--text-3)" }}>Factual (0%)</span>
+        <span style={{ fontSize: 10, color: "var(--text-3)" }}>Hallucinated (100%)</span>
       </div>
+      <p style={{ fontSize: 10, color: "var(--text-3)", textAlign: "center", marginTop: 12 }}>
+        Risk score based on pattern similarity — not a guarantee of factual accuracy
+      </p>
     </div>
   )
 }

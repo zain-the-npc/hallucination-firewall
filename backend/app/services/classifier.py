@@ -4,13 +4,13 @@ import torch.nn.functional as F
 
 from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
 
-from app.config import HALLUCINATION_THRESHOLD
+HALLUCINATION_THRESHOLD = 0.41
 
 import os
 os.environ["TRANSFORMERS_CACHE"] = os.path.join(os.path.dirname(__file__), "../../model_cache")
 os.environ["HF_HOME"]            = os.path.join(os.path.dirname(__file__), "../../model_cache")
 
-HF_MODEL_ID = "zain-the-npc/hallucination-firewall"
+HF_MODEL_ID = "zain-the-npc/hallucination-firewall-v3"
 
 
 
