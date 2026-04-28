@@ -1,7 +1,8 @@
+import os
 from openai import OpenAI
 from app.config import OPENAI_API_KEY
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 def get_gpt_response(question: str, history: list = None) -> str:
     if history is None:

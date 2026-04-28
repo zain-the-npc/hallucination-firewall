@@ -121,6 +121,27 @@ async function askFirewallSync(question: string, mode: string, model: string, me
 }
 
 
+// ─── RiskBar component — animates width on mount ──────────────────────────────
+function RiskBar({ score }: { score: number }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const pct = Math.min(score * 100, 100)
+  const color = score < 0.15 ? '#10b981' : score < 0.5 ? '#f59e0b' : '#ef4444'
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (ref.current) ref.current.style.width = `${pct}%`
+    }, 200)
+    return () => clearTimeout(t)
+  }, [pct])
+  return (
+    <div ref={ref} className="h-full rounded-full" style={{
+      width: '0%',
+      background: color,
+      boxShadow: score < 0.15 ? '0 0 12px rgba(16,185,129,0.5)' : score < 0.5 ? '0 0 12px rgba(245,158,11,0.4)' : '0 0 12px rgba(239,68,68,0.5)',
+      transition: 'width 1.4s cubic-bezier(0.65,0,0.35,1)'
+    }} />
+  )
+}
+
 export default function ChatWindow({ sessionId, onSessionCreated, userId, user, onToggleSidebar }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [question, setQuestion] = useState("")
@@ -174,6 +195,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
         setStatusMsg(msg)
         setStatusHistory(prev => [...prev, msg])
       })
+      console.log("STREAM RESULT intent:", data.intent, "status:", data.status)
 
       const aMsg: Message = {
         role: "assistant",
@@ -226,6 +248,8 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
   function handleKey(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) handleSubmit()
   }
+
+
 
   /* ── sub-components ── */
   function Sources({ sources }: { sources: Source[] }) {
@@ -324,206 +348,341 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
   const modeColor = mode === "firewall" ? "var(--accent)" : mode === "compare" ? "var(--purple)" : "var(--text-2)"
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden relative font-headline bg-background text-on-surface w-full">
-      {/* TopNavBar Shell */}
-      <header className="flex items-center justify-between w-full px-4 md:pl-8 md:pr-8 h-16 sticky top-0 bg-[#131313] z-40">
-        <div className="flex items-center gap-2 md:gap-8">
+    <div className="flex flex-col h-screen overflow-hidden relative font-headline bg-background text-on-surface w-full" style={{ cursor: 'aùto' }}>
+      {/* Cursor */}
+
+      {/* Noise Overlay */}
+      <div className="noise-overlay" />
+      {/* Ambient Glow */}
+      <div className="ambient-glow" />
+
+      {/* Header */}
+      <header className="h-16 px-6 md:px-12 flex items-center justify-between sticky top-0 z-40 relative" style={{ background: 'rgba(5,6,8,0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+        <div className="flex items-center gap-6 h-full">
           <button
+            id="open-sidebar-btn"
             onClick={onToggleSidebar}
-            className="md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center text-[#ffffff]"
+            className="hidden p-2 text-white/30 hover:text-white hover:bg-white/5 rounded-md transition-all min-h-[44px] min-w-[44px] items-center justify-center"
             aria-label="Toggle Menu"
           >
-            <span className="material-symbols-outlined">menu</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 12h18M3 6h18M3 18h18" /></svg>
           </button>
-          <div className="flex gap-4 md:gap-8">
-            <button onClick={() => { setModel("gpt4"); setMode("chat") }} className={`text-sm font-medium transition-opacity active:opacity-80 min-h-[44px] ${model === 'gpt4' && mode !== 'compare' && mode !== 'firewall' ? 'text-[#ffffff] border-b border-[#ffffff] pb-1' : 'text-[#c6c6c6] hover:text-[#ffffff]'}`}>GPT-4</button>
-            <button onClick={() => { setModel("gemini"); setMode("chat") }} className={`text-sm font-medium transition-colors active:opacity-80 min-h-[44px] ${model === 'gemini' && mode !== 'compare' && mode !== 'firewall' ? 'text-[#ffffff] border-b border-[#ffffff] pb-1' : 'text-[#c6c6c6] hover:text-[#ffffff]'}`}>Groq</button>
-          </div>
+          <nav className="flex gap-6 h-full items-center">
+            <button
+              onClick={() => { setModel("gpt4"); setMode("chat") }}
+              className={`relative h-full flex items-center text-xs font-bold tracking-[0.1em] uppercase transition-colors ${model === 'gpt4' && mode !== 'compare' && mode !== 'firewall' ? 'text-white' : 'text-white/40 hover:text-white'
+                }`}
+            >
+              GPT-4
+              {model === 'gpt4' && mode !== 'compare' && mode !== 'firewall' && (
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white" />
+              )}
+            </button>
+            <button
+              onClick={() => { setModel("gemini"); setMode("chat") }}
+              className={`relative h-full flex items-center text-xs font-bold tracking-[0.1em] uppercase transition-colors ${model === 'gemini' && mode !== 'compare' && mode !== 'firewall' ? 'text-white' : 'text-white/40 hover:text-white'
+                }`}
+            >
+              Groq
+              {model === 'gemini' && mode !== 'compare' && mode !== 'firewall' && (
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white" />
+              )}
+            </button>
+          </nav>
         </div>
-        <div className="flex items-center gap-4">
-          {/* Profile and Settings buttons entirely removed */}
+        {/* System Active indicator */}
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-emerald-500" style={{ boxShadow: '0 0 10px rgba(16,185,129,0.5)' }} />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/80">System Active</span>
         </div>
       </header>
 
       {/* Central Content Canvas */}
       <section className="flex-1 overflow-y-auto px-4 md:px-12 py-8 md:py-16 flex flex-col items-center custom-scroll w-full">
         {messages.length === 0 ? (
-          <div className="w-full flex flex-col items-center">
-            <div className="w-full max-w-4xl mb-16 text-center">
-              <h2 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-on-surface mb-4">Refine your Intelligence</h2>
-              <p className="text-lg text-on-surface-variant font-normal">AI answers, human-grade verification.</p>
-            </div>
-
-            {/* Core Feature Cards (Bento-inspired Grid) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
-              <div onClick={() => setMode("chat")} className={`bg-surface-container-low hover:bg-surface-container transition-all duration-300 p-8 flex flex-col group h-full cursor-pointer rounded-sm ${mode === 'chat' ? 'border border-[#ffffff]' : 'border border-outline-variant/10 hover:border-outline-variant/30'}`}>
-                <div className="mb-6 text-primary">
-                  <span className="material-symbols-outlined text-3xl">bolt</span>
-                </div>
-                <h3 className="text-xl font-bold text-on-surface mb-3">Quick Answer</h3>
-                <p className="text-on-surface-variant text-sm leading-relaxed flex-1">
-                  Instant responses for rapid verification and factual lookups. Engineered for speed without compromising core precision.
-                </p>
-                <div className="mt-6 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                  Launch <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                </div>
+          <div className="w-full flex flex-col items-center justify-center" style={{ position: 'relative', zIndex: 1, minHeight: '70vh' }}>
+            <div className="mesh-background" />
+            <div className="max-w-4xl w-full flex flex-col items-center">
+              <div className="mb-4">
+                <h2 className="typewriter font-cabinet text-5xl md:text-6xl text-white tracking-tighter" style={{ fontWeight: 900 }}>Refine your Intelligence</h2>
               </div>
+              <p className="text-white/40 text-lg mb-16 stagger-in" style={{ animationDelay: '0.1s' }}>AI answers, human-grade verification.</p>
 
-              <div onClick={() => setMode("firewall")} className={`bg-surface-container-low hover:bg-surface-container transition-all duration-300 p-8 flex flex-col group h-full cursor-pointer rounded-sm ${mode === 'firewall' ? 'border border-[#ffffff]' : 'border border-outline-variant/10 hover:border-outline-variant/30'}`}>
-                <div className="mb-6 text-primary">
-                  <span className="material-symbols-outlined text-3xl">fact_check</span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+                {/* Card 1 — Quick Answer */}
+                <div onClick={() => setMode("chat")} className="shimmer-card p-8 rounded-xl group stagger-in cursor-pointer" style={{ animationDelay: '0.2s' }}>
+                  <div className={`w-10 h-10 mb-6 flex items-center justify-center rounded-lg border transition-colors ${mode === 'chat'
+                    ? 'bg-emerald-500/10 border-emerald-500/50'
+                    : 'bg-white/5 border-white/10 group-hover:border-emerald-500/50'
+                    }`}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={`transition-colors ${mode === 'chat' ? 'text-emerald-400' : 'text-white/60 group-hover:text-emerald-400'}`}><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  </div>
+                  <h3 className="font-bold text-white mb-3 text-lg">Quick Answer</h3>
+                  <p className="text-sm text-white/50 leading-relaxed">Instant responses for rapid verification and factual lookups. Engineered for speed without compromising core precision.</p>
                 </div>
-                <h3 className="text-xl font-bold text-on-surface mb-3">Verified Research</h3>
-                <p className="text-on-surface-variant text-sm leading-relaxed flex-1">
-                  Deep-dive analysis with cited sources and cross-referenced datasets for high-stakes decision making.
-                </p>
-                <div className="mt-6 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                  Launch <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                </div>
-              </div>
 
-              <div onClick={() => setMode("compare")} className={`bg-surface-container-low hover:bg-surface-container transition-all duration-300 p-8 flex flex-col group h-full cursor-pointer rounded-sm ${mode === 'compare' ? 'border border-[#ffffff]' : 'border border-outline-variant/10 hover:border-outline-variant/30'}`}>
-                <div className="mb-6 text-primary">
-                  <span className="material-symbols-outlined text-3xl">balance</span>
+                {/* Card 2 — Verified Research */}
+                <div onClick={() => setMode("firewall")} className="shimmer-card p-8 rounded-xl group stagger-in cursor-pointer" style={{ animationDelay: '0.3s' }}>
+                  <div className="w-10 h-10 mb-6 flex items-center justify-center bg-emerald-500/10 rounded-lg border border-emerald-500/30 group-hover:bg-emerald-500/20 transition-all" style={{ boxShadow: '0 0 15px rgba(16,185,129,0.1)' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-emerald-400"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                  </div>
+                  <h3 className="font-bold text-white mb-3 text-lg">Verified Research</h3>
+                  <p className="text-sm text-white/50 leading-relaxed">Deep-dive analysis with cited sources and cross-referenced datasets for high-stakes decision making.</p>
+                  <div className="mt-4 flex gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">ACTIVE ENGINE</span>
+                  </div>
                 </div>
-                <h3 className="text-xl font-bold text-on-surface mb-3">Model Comparison</h3>
-                <p className="text-on-surface-variant text-sm leading-relaxed flex-1">
-                  Direct parallel analysis between GPT-4 and Groq. Identify delta points in logic and output consistency.
-                </p>
-                <div className="mt-6 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                  Launch <span className="material-symbols-outlined text-sm">arrow_forward</span>
+
+                {/* Card 3 — Model Comparison */}
+                <div onClick={() => setMode("compare")} className="shimmer-card p-8 rounded-xl group stagger-in cursor-pointer" style={{ animationDelay: '0.4s' }}>
+                  <div className={`w-10 h-10 mb-6 flex items-center justify-center rounded-lg border transition-colors ${mode === 'compare'
+                    ? 'bg-indigo-500/10 border-indigo-500/50'
+                    : 'bg-white/5 border-white/10 group-hover:border-indigo-500/50'
+                    }`}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={`transition-colors ${mode === 'compare' ? 'text-indigo-400' : 'text-white/60 group-hover:text-indigo-400'}`}><path d="M12 3v1m0 16v1M3 12h1m16 0h1M5.636 5.636l.707.707M17.657 17.657l.707.707M5.636 18.364l.707-.707M17.657 6.343l.707-.707" /></svg>
+                  </div>
+                  <h3 className="font-bold text-white mb-3 text-lg">Model Comparison</h3>
+                  <p className="text-sm text-white/50 leading-relaxed">Direct parallel analysis between GPT-4 and Groq. Identify delta points in logic and output consistency.</p>
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="w-full max-w-4xl mx-auto flex flex-col">
+          <div className="w-full max-w-4xl mx-auto flex flex-col space-y-12">
             {messages.map((msg, i) => (
-              <div key={i} className="mb-10 anim-up">
+              <div key={i} className="fade-up" style={{ animationDelay: `${i * 0.05}s` }}>
+
+                {/* ── USER BUBBLE ── */}
                 {msg.role === "user" && (
                   <div className="flex justify-end">
-                    <div className="bg-surface-bright border border-outline-variant/20 rounded-sm px-4 md:px-6 py-4 max-w-[95%] md:max-w-[80%] shadow-lg">
-                      <p className="text-sm text-on-surface leading-relaxed break-words word-break break-all min-w-0" style={{ wordBreak: 'break-word' }}>{msg.question}</p>
+                    <div className="max-w-[80%] glass-card p-5 rounded-2xl rounded-tr-none shadow-xl">
+                      <p className="text-[15px] leading-relaxed text-white/90" style={{ wordBreak: 'break-word' }}>{msg.question}</p>
+                      <div className="mt-3 flex justify-end">
+                        <span className="text-[9px] uppercase tracking-widest text-white/20 font-bold">
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          {msg.intent ? ` · ${msg.intent}` : ''}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
 
+                {/* ── CHAT MODE RESPONSE ── */}
                 {msg.role === "assistant" && msg.mode === "chat" && (
-                  <div className="max-w-full md:max-w-[85%] mt-6">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className={`w-2 h-2 rounded-full ${msg.model_used === 'gemini' ? 'bg-[#c6c6c6]' : 'bg-[#ffffff]'}`}></div>
-                      <span className="text-xs uppercase tracking-widest font-bold text-on-surface-variant">{msg.model_used === "gemini" ? "Groq" : "GPT-4"}</span>
+                  <div className="space-y-4 fade-up" style={{ animationDelay: '0.1s' }}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                        {msg.model_used === 'gemini' ? 'Groq' : 'GPT-4'} · Quick Answer
+                      </span>
                     </div>
-                    <div className="bg-surface-container-low border border-outline-variant/10 rounded-sm px-6 py-4 shadow-sm">
-                      <p className="text-sm text-on-surface-variant leading-relaxed whitespace-pre-wrap">
-                        {msg.model_used === "gemini" ? msg.gemini_raw_answer : msg.gpt_raw_answer}
+                    <div className="glass-card p-6 rounded-2xl shadow-xl">
+                      <p className="text-sm leading-relaxed text-white/80 whitespace-pre-wrap" style={{ wordBreak: 'break-word' }}>
+                        {msg.model_used === 'gemini' ? msg.gemini_raw_answer : msg.gpt_raw_answer}
                       </p>
                     </div>
                   </div>
                 )}
 
+                {/* ── FIREWALL MODE RESPONSE ── */}
                 {msg.role === "assistant" && msg.mode === "firewall" && (
-                  <div className="max-w-full md:max-w-[95%] mt-6 flex flex-col gap-4">
+                  <div className="space-y-6 fade-up" style={{ animationDelay: '0.2s' }}>
+
                     {msg.status === "SKIPPED" ? (
-                      <div className="bg-surface-container-low border border-outline-variant/10 rounded-sm px-4 md:px-6 py-4 shadow-sm overflow-hidden">
-                        <p className="text-sm text-on-surface-variant leading-relaxed break-words" style={{ wordBreak: 'break-word' }}>
-                          {msg.model_used === "gemini" ? msg.gemini_raw_answer : msg.gpt_raw_answer}
+                      /* Conversational skip */
+                      <div className="glass-card p-6 rounded-2xl space-y-4">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
+                          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#6366f1' }}>Conversational query — RAG skipped</span>
+                        </div>
+                        <p className="text-sm text-white/70 leading-relaxed" style={{ wordBreak: 'break-word' }}>
+                          {msg.model_used === 'gemini' ? msg.gemini_raw_answer : msg.gpt_raw_answer}
                         </p>
+                        <div className="flex gap-2">
+                          <span className="text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)' }}>
+                            Intent: {msg.intent || 'conversational'}
+                          </span>
+                        </div>
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-center gap-4">
-                          <FirewallBadge status={msg.status!} />
-                        </div>
-                        <ConfidenceMeter score={msg.hallucination_score ?? 0} label={msg.confidence_label ?? ""} />
-                        <div className="bg-surface-container-low border border-outline-variant/10 rounded-sm p-4 md:p-6 overflow-hidden">
-                          <div className="flex justify-between items-center mb-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">{msg.model_used === "gemini" ? "Groq" : "GPT-4"} RAW</span>
-                            </div>
-                            {msg.status !== "PASSED" && msg.status !== "VERIFIED" && (
-                              <Tag label="Unverified" color="#f59e0b" />
-                            )}
+                        {/* Status badges */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${msg.status === 'VERIFIED' || msg.status === 'PASSED'
+                            ? 'bg-emerald-500/10 border-emerald-500/30 pulse-emerald'
+                            : 'bg-red-500/10 border-red-500/30 pulse-crimson'
+                            }`}>
+                            {msg.status === 'VERIFIED' || msg.status === 'PASSED'
+                              ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22,4 12,14.01 9,11.01" /></svg>
+                              : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+                            }
+                            <span className={`text-[10px] font-bold uppercase tracking-widest ${msg.status === 'VERIFIED' || msg.status === 'PASSED' ? 'text-emerald-400' : 'text-red-400'
+                              }`}>{msg.status || 'Analyzed'}</span>
                           </div>
-                          <p className="text-sm text-on-surface-variant leading-relaxed break-words" style={{ wordBreak: 'break-word' }}>
-                            {msg.model_used === "gemini" ? msg.gemini_raw_answer : msg.gpt_raw_answer}
-                          </p>
-                        </div>
-                        {msg.knowledge_panel && <KnowledgePanel panel={msg.knowledge_panel} />}
-                        {msg.gpt_verified && msg.gpt_reasoning && (
-                          <div className="bg-surface-container border border-outline-variant/10 rounded-sm p-6">
-                            <div className="flex justify-between items-center mb-4">
-                              <p className="text-xs font-bold uppercase tracking-widest text-on-surface">{msg.model_used === "gemini" ? "GPT-4" : "GROQ"} VERIFICATION</p>
-                              <Tag label={msg.gpt_verdict || ""} color={msg.gpt_verdict === "FACTUAL" ? "#10b981" : "#ef4444"} />
+                          {msg.intent && (
+                            <div className="px-3 py-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">Intent: {msg.intent}</span>
                             </div>
-                            <p className="text-sm text-on-surface-variant leading-relaxed">{msg.gpt_reasoning}</p>
-                          </div>
-                        )}
-                        {msg.corrected_answer && (
-                          <div className="bg-[#1c2c26] border border-[#2d4d3d] rounded-sm p-4 md:p-6 overflow-hidden">
-                            <div className="flex justify-between items-center mb-4">
-                              <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></div>
-                                <p className="text-xs font-bold uppercase tracking-widest text-[#10b981]">RAG-GROUNDED CORRECTION</p>
+                          )}
+                        </div>
+
+                        {/* Main analysis glass card */}
+                        <div className="glass-card p-8 rounded-3xl space-y-8 shadow-2xl">
+
+                          {/* Risk Bar */}
+                          {msg.hallucination_score != null && (
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-end">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Hallucination Risk</p>
+                                <span className="font-mono text-lg font-bold" style={{
+                                  color: (msg.hallucination_score ?? 0) < 0.15 ? '#10b981' : (msg.hallucination_score ?? 0) < 0.5 ? '#f59e0b' : '#ef4444'
+                                }}>
+                                  {(msg.hallucination_score ?? 0) < 0.15 ? 'Factual' : 'Risk'} {Number(((msg.hallucination_score ?? 0) * 100).toFixed(1))}%
+                                </span>
+                              </div>
+                              <div className="risk-bar-container h-1.5 w-full rounded-full overflow-hidden">
+                                <RiskBar score={msg.hallucination_score ?? 0} />
+                              </div>
+                              <div className="flex justify-between text-[8px] uppercase tracking-widest font-bold text-white/10">
+                                <span>Factual (0%)</span><span>Hallucinated (100%)</span>
+                              </div>
+                              <p className="text-[9px] text-white/20 italic text-center">Risk score based on pattern similarity — not a guarantee of factual accuracy</p>
+                            </div>
+                          )}
+
+                          {/* Content sections */}
+                          <div className="grid grid-cols-1 gap-5">
+                            {/* GPT-4 Raw Output */}
+                            <div className="space-y-2">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">
+                                {msg.model_used === 'gemini' ? 'Groq' : 'GPT-4'} Raw Output
+                              </p>
+                              <div className="p-5 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                <p className="text-sm leading-relaxed text-white/70 italic" style={{ wordBreak: 'break-word' }}>
+                                  {msg.model_used === 'gemini' ? msg.gemini_raw_answer : msg.gpt_raw_answer}
+                                </p>
                               </div>
                             </div>
-                            <p className="text-sm text-on-surface leading-relaxed">{msg.corrected_answer}</p>
+
+                            {/* Groq/GPT Verification */}
+                            {msg.gpt_verified && msg.gpt_reasoning && (
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">
+                                    {msg.model_used === 'gemini' ? 'GPT-4' : 'Groq'} Verification Engine
+                                  </p>
+                                  <span className={`text-[9px] px-2 py-0.5 rounded uppercase font-bold tracking-widest border ${msg.gpt_verdict === 'FACTUAL'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                    : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                    }`}>{msg.gpt_verdict || 'Analyzed'}</span>
+                                </div>
+                                <div className="p-5 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                  <p className="text-sm leading-relaxed text-white/70" style={{ wordBreak: 'break-word' }}>{msg.gpt_reasoning}</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* RAG Correction */}
+                            {msg.corrected_answer && (
+                              <div className="space-y-2">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">RAG-Grounded Correction</p>
+                                <div className="rag-box p-6 rounded-xl">
+                                  <p className="text-sm leading-relaxed font-bold text-emerald-100/90" style={{ wordBreak: 'break-word' }}>{msg.corrected_answer}</p>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {/* ── SOURCES: shown whenever present, regardless of correction ── */}
-                        {msg.sources && msg.sources.length > 0 && <Sources sources={msg.sources} />}
-                        <div className="flex gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider bg-surface-container border border-outline-variant/20 px-3 py-1 rounded-sm text-on-surface-variant">Intent: {msg.intent || "factual"}</span>
+
+                          {/* Sources */}
+                          {msg.sources && msg.sources.length > 0 && (
+                            <div className="space-y-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Verified Sources</p>
+                              <div className="flex flex-wrap gap-2">
+                                {msg.sources.map((s, si) => (
+                                  <a key={si} href={s.url} target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-[11px] text-white/50 hover:text-white"
+                                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                                    onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(16,185,129,0.4)')}
+                                    onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)')}
+                                  >
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14,2 14,8 20,8" /></svg>
+                                    {s.name}
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </>
                     )}
                   </div>
                 )}
 
+                {/* ── COMPARE MODE RESPONSE ── */}
                 {msg.role === "assistant" && msg.mode === "compare" && (
-                  <div className="mt-6 flex flex-col gap-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-surface-container border border-outline-variant/10 rounded-sm p-6">
-                        <div className="flex justify-between items-center mb-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-[#10b981]"></div>
-                            <span className="text-xs font-bold uppercase tracking-widest text-on-surface">GPT-4</span>
-                          </div>
+                  <div className="space-y-5 fade-up" style={{ animationDelay: '0.15s' }}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-indigo-400 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Model Comparison · GPT-4 vs Groq</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      {/* GPT-4 column */}
+                      <div className="glass-card p-6 rounded-2xl space-y-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">GPT-4</span>
                         </div>
-                        <p className="text-sm text-on-surface-variant leading-relaxed min-h-[100px] mb-6">{msg.gpt_raw_answer}</p>
-                        <div className="border-t border-outline-variant/10 pt-4">
-                          <div className="flex justify-between text-xs font-bold font-mono mb-2">
-                            <span className="text-on-surface-variant uppercase">Risk</span>
-                            <span style={{ color: (msg.hallucination_score ?? 0) >= 0.08 ? "#ef4444" : "#10b981" }}>{Number(((msg.hallucination_score ?? 0) * 100).toFixed(1))}%</span>
+                        <p className="text-sm text-white/70 leading-relaxed min-h-[80px]" style={{ wordBreak: 'break-word' }}>{msg.gpt_raw_answer}</p>
+                        <div className="border-t pt-4" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                          <div className="flex justify-between text-[10px] font-bold font-mono mb-2">
+                            <span className="text-white/30 uppercase">Risk</span>
+                            <span style={{ color: (msg.hallucination_score ?? 0) >= 0.08 ? '#ef4444' : '#10b981' }}>
+                              {Number(((msg.hallucination_score ?? 0) * 100).toFixed(1))}%
+                            </span>
                           </div>
-                          <div className="h-1 bg-surface-variant rounded-full overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${Math.min((msg.hallucination_score ?? 0) * 100, 100)}%`, background: (msg.hallucination_score ?? 0) >= 0.08 ? "#ef4444" : "#10b981" }}></div>
+                          <div className="h-1 rounded-full overflow-hidden risk-bar-container">
+                            <div className="h-full rounded-full risk-bar-fill" style={{
+                              width: `${Math.min((msg.hallucination_score ?? 0) * 100, 100)}%`,
+                              background: (msg.hallucination_score ?? 0) >= 0.08 ? '#ef4444' : '#10b981',
+                              transition: 'width 1.4s cubic-bezier(0.65,0,0.35,1)'
+                            }} />
                           </div>
                         </div>
                       </div>
-
-                      <div className="bg-surface-container border border-outline-variant/10 rounded-sm p-6">
-                        <div className="flex justify-between items-center mb-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-[#ffffff]"></div>
-                            <span className="text-xs font-bold uppercase tracking-widest text-on-surface">Groq</span>
-                          </div>
+                      {/* Groq column */}
+                      <div className="glass-card p-6 rounded-2xl space-y-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-white/60" />
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Groq</span>
                         </div>
-                        <p className="text-sm text-on-surface-variant leading-relaxed min-h-[100px] mb-6">{msg.gemini_raw_answer}</p>
-                        <div className="border-t border-outline-variant/10 pt-4">
-                          <div className="flex justify-between text-xs font-bold font-mono mb-2">
-                            <span className="text-on-surface-variant uppercase">Risk</span>
-                            <span style={{ color: (msg.gemini_score ?? 0) >= 0.08 ? "#ef4444" : "#10b981" }}>{Number(((msg.gemini_score ?? 0) * 100).toFixed(1))}%</span>
+                        <p className="text-sm text-white/70 leading-relaxed min-h-[80px]" style={{ wordBreak: 'break-word' }}>{msg.gemini_raw_answer}</p>
+                        <div className="border-t pt-4" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                          <div className="flex justify-between text-[10px] font-bold font-mono mb-2">
+                            <span className="text-white/30 uppercase">Risk</span>
+                            <span style={{ color: (msg.gemini_score ?? 0) >= 0.08 ? '#ef4444' : '#10b981' }}>
+                              {Number(((msg.gemini_score ?? 0) * 100).toFixed(1))}%
+                            </span>
                           </div>
-                          <div className="h-1 bg-surface-variant rounded-full overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${Math.min((msg.gemini_score ?? 0) * 100, 100)}%`, background: (msg.gemini_score ?? 0) >= 0.08 ? "#ef4444" : "#10b981" }}></div>
+                          <div className="h-1 rounded-full overflow-hidden risk-bar-container">
+                            <div className="h-full rounded-full risk-bar-fill" style={{
+                              width: `${Math.min((msg.gemini_score ?? 0) * 100, 100)}%`,
+                              background: (msg.gemini_score ?? 0) >= 0.08 ? '#ef4444' : '#10b981',
+                              transition: 'width 1.4s cubic-bezier(0.65,0,0.35,1)'
+                            }} />
                           </div>
                         </div>
                       </div>
                     </div>
+                    {/* Winner card */}
                     {msg.winner && (
-                      <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #2a2a2a', fontSize: '14px' }}>
-                        🏆 <strong>Winner: {msg.winner === 'gpt4' ? 'GPT-4' : msg.winner === 'groq' ? 'Groq' : 'Tie'}</strong> — {msg.winner_reason}
+                      <div className="glass-card p-5 rounded-2xl flex items-center gap-3">
+                        <span className="text-lg">🏆</span>
+                        <div>
+                          <p className="text-sm font-bold text-white">
+                            Winner: {msg.winner === 'gpt4' ? 'GPT-4' : msg.winner === 'groq' ? 'Groq' : 'Tie'}
+                          </p>
+                          <p className="text-xs text-white/40 mt-0.5">{msg.winner_reason}</p>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -531,19 +690,22 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
               </div>
             ))}
 
+            {/* Loading state */}
             {loading && (
-              <div className="mb-10 pl-2">
+              <div className="fade-up space-y-4" style={{ animationDelay: '0.1s' }}>
                 <LiveStatus />
                 {!statusMsg && (
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded-full border-2 border-[#ffffff] border-t-transparent animate-spin"></div>
-                    <span className="text-sm text-[#ffffff] font-bold">Analysis in progress...</span>
+                  <div className="glass-card p-5 rounded-2xl flex items-center gap-3">
+                    <div className="w-4 h-4 rounded-full border-2 border-white/60 border-t-transparent animate-spin" />
+                    <span className="text-sm text-white/60 font-medium">Analysis in progress...</span>
                   </div>
                 )}
               </div>
             )}
+
+            {/* Error */}
             {error && (
-              <div className="bg-[#93000a]/20 border border-[#93000a]/40 text-[#ffb4ab] px-6 py-4 rounded-sm text-sm mb-10">
+              <div className="p-4 rounded-xl text-sm text-red-400" style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)' }}>
                 {error}
               </div>
             )}
@@ -553,32 +715,39 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
       </section>
 
       {/* Input Area (Fixed Bottom) */}
-      <div className="fixed bottom-0 right-0 left-0 md:left-64 px-4 md:px-12 pb-4 md:pb-10 pt-4 md:pt-10 pointer-events-none z-50 bg-[#131313] md:bg-transparent shadow-[0_-20px_20px_-10px_#131313_inset] md:shadow-[0_-50px_40px_-20px_#131313_inset]">
-        <div className="max-w-4xl mx-auto relative pointer-events-auto">
-          <div className="flex items-center bg-surface-container-lowest border-b border-outline-variant/20 focus-within:border-primary transition-colors px-4 md:px-6 py-2 md:py-4">
-            <input
-              ref={inputRef}
-              value={question}
-              onChange={e => setQuestion(e.target.value)}
-              onKeyDown={handleKey}
-              className="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-on-surface-variant/40 text-sm outline-none w-full min-h-[44px]"
-              placeholder={mode === 'firewall' ? "Analyze a complex dataset or verify a claim..." : "Analyze a complex dataset or verify a claim..."}
-              type="text"
-            />
-            <div className="flex items-center gap-2 md:gap-4 ml-2">
-              <button className="text-on-surface-variant hover:text-[#ffffff] transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
-                <span className="material-symbols-outlined text-xl">attach_file</span>
-              </button>
-              <button onClick={handleSubmit} disabled={loading || !question.trim()} className="w-11 h-11 bg-[#ffffff] text-on-primary rounded-sm flex items-center justify-center hover:opacity-90 active:scale-[0.95] transition-all disabled:opacity-50">
-                <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
-              </button>
+      <footer className="p-6 md:p-8 flex flex-col items-center gap-4 fixed bottom-0 right-0 left-0 md:left-60 z-50 pointer-events-none">
+        <div className="max-w-3xl w-full pointer-events-auto">
+          <div className="input-focus-glow bg-[#0D0E12] border border-white/10 rounded-xl overflow-hidden shadow-2xl transition-all duration-300">
+            <div className="flex items-center px-4 py-2">
+              <input
+                ref={inputRef}
+                value={question}
+                onChange={e => setQuestion(e.target.value)}
+                onKeyDown={handleKey}
+                className="flex-1 bg-transparent border-none focus:ring-0 text-white text-sm placeholder:text-white/20 py-4 px-2 outline-none"
+                placeholder="Analyze a complex dataset or verify a claim..."
+                type="text"
+              />
+              <div className="flex items-center gap-2">
+                <button className="p-2 text-white/30 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
+                  {/* Paperclip icon */}
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
+                </button>
+                <button
+                  id="send-btn"
+                  onClick={handleSubmit}
+                  disabled={loading || !question.trim()}
+                  className="w-10 h-10 bg-white hover:bg-emerald-400 text-black rounded-lg flex items-center justify-center transition-all btn-press shadow-lg disabled:opacity-50"
+                >
+                  {/* Send-horizontal icon */}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" /></svg>
+                </button>
+              </div>
             </div>
           </div>
-          <div className="mt-4 flex justify-center">
-            <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-[0.1em] font-medium">VerifyAI can make mistakes. Verify critical information.</p>
-          </div>
+          <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.4em] text-center mt-3 shimmer-text">VERIFYAI CAN MAKE MISTAKES. VERIFY CRITICAL INFORMATION.</p>
         </div>
-      </div>
+      </footer>
       <style jsx>{`
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #353534; border-radius: 4px; }

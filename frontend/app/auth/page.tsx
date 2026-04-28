@@ -1,19 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { supabase } from "../../lib/supabase"
 import { useRouter } from "next/navigation"
 
 type Mode = "login" | "signup"
 
 export default function AuthPage() {
-  const [mode,     setMode]     = useState<Mode>("login")
-  const [email,    setEmail]    = useState("")
+  const [mode, setMode] = useState<Mode>("login")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [name,     setName]     = useState("")
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState<string | null>(null)
+  const [name, setName] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const dotRef = useRef<HTMLDivElement>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -47,171 +48,187 @@ export default function AuthPage() {
     setError(null);
   }
 
+  // Cursor tracking
+  useEffect(() => {
+    const dot = dotRef.current;
+    if (!dot) return;
+
+    const move = (e: MouseEvent) => {
+      dot.style.left = e.clientX + 'px';
+      dot.style.top = e.clientY + 'px';
+    };
+
+    const grow = () => {
+      dot.style.width = '12px';
+      dot.style.height = '12px';
+      dot.style.background = 'white';
+      dot.style.boxShadow = '0 0 30px 10px rgba(255, 255, 255, 0.4)';
+    };
+
+    const shrink = () => {
+      dot.style.width = '5px';
+      dot.style.height = '5px';
+      dot.style.background = 'white';
+      dot.style.boxShadow = '0 0 15px 4px rgba(255, 255, 255, 0.2)';
+    };
+
+    window.addEventListener('mousemove', move);
+
+    const interactables = document.querySelectorAll('button, a, input, .feature-pill');
+    interactables.forEach(el => {
+      el.addEventListener('mouseenter', grow);
+      el.addEventListener('mouseleave', shrink);
+    });
+
+    return () => {
+      window.removeEventListener('mousemove', move);
+      interactables.forEach(el => {
+        el.removeEventListener('mouseenter', grow);
+        el.removeEventListener('mouseleave', shrink);
+      });
+    };
+  }, [mode]);
+
   return (
-    <div className="font-body text-on-surface flex flex-col min-h-screen" style={{
-        backgroundColor: '#131313',
-        backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.03) 1px, transparent 0)',
-        backgroundSize: '40px 40px'
-    }}>
-      {/* TopNavBar */}
-      <header className="fixed top-0 w-full z-50">
-        <div className="flex justify-between items-center px-8 py-6 w-full max-w-7xl mx-auto">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 flex items-center justify-center bg-surface-container rounded-lg border border-outline-variant/20">
-              <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24" }}>hexagon</span>
-            </div>
-            <span className="text-2xl font-bold tracking-tighter text-slate-100 font-headline">VerifyAI</span>
-          </div>
-          <div className="hidden md:flex gap-6 items-center">
-            <span className="material-symbols-outlined text-slate-500 hover:text-indigo-200 transition-colors cursor-pointer" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24" }}>help</span>
-            <span className="material-symbols-outlined text-slate-500 hover:text-indigo-200 transition-colors cursor-pointer" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24" }}>info</span>
+    <div className="auth-page relative flex flex-col" style={{ height: '100vh', overflow: 'hidden', background: '#020305' }}>
+      {/* Cursor Dot */}
+      <div ref={dotRef} className="cursor-dot" />
+
+      {/* Noise Overlay */}
+      <div className="noise-overlay" />
+
+      {/* Mesh Background */}
+      <div className="mesh-background" />
+
+      {/* Top Branding */}
+      <header className="absolute top-0 left-0 w-full p-8 md:p-12 flex justify-between items-center z-40">
+        <div className="flex items-center gap-4">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+          <div className="flex flex-col">
+            <h1 className="text-white text-lg tracking-[0.3em] uppercase leading-none font-extrabold">VerifyAI</h1>
+            <p className="text-[10px] text-white/20 tracking-[0.1em] font-bold mt-1.5 uppercase">Cognitive Audit Engine</p>
           </div>
         </div>
       </header>
 
-      <main className="flex-grow flex flex-col items-center justify-center px-0 md:px-4 relative w-full">
-        <div className="absolute top-1/4 -left-20 w-96 h-96 bg-primary/5 rounded-full blur-[120px]"></div>
-        <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-tertiary/5 rounded-full blur-[120px]"></div>
-
-        {/* Login Card */}
-        <div className="w-full max-w-[440px] p-8 md:p-10 rounded-none md:rounded-2xl border-0 md:border border-outline-variant/20 shadow-2xl relative z-10 mx-auto"
-             style={{ background: "rgba(28, 27, 27, 0.6)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
-          
-          <div className="flex flex-col items-center mb-8">
-            <div className="relative mb-6">
-              <span className="material-symbols-outlined text-primary text-5xl" style={{ fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24" }}>hexagon</span>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-3 h-3 bg-on-primary rounded-full shadow-[0_0_15px_rgba(192,193,255,0.6)]"></div>
+      {/* Main Login Section */}
+      <main className="flex-1 flex items-center justify-center p-6 relative z-10">
+        <div className="w-full max-w-[500px]">
+          <div className="auth-card">
+            <div className="auth-card-inner">
+              <div className="flex flex-col items-center mb-8">
+                <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center mb-8 shadow-2xl backdrop-blur-md">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5">
+                    <path d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
+                  </svg>
+                </div>
+                <h2 className="text-4xl text-white tracking-tighter mb-3 font-extrabold">SECURE ACCESS</h2>
+                <p className="text-white/20 text-xs uppercase tracking-[0.2em] font-bold">Verification Level 4 • Protocol Active</p>
               </div>
-            </div>
-            <h1 className="font-headline text-3xl font-extrabold tracking-tight mb-2 text-on-surface">
-              {mode === "login" ? "Sign in to your account" : "Create an account"}
-            </h1>
-            <p className="text-on-surface-variant font-medium text-sm">Welcome back to the Digital Curator.</p>
-          </div>
 
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            {mode === "signup" && (
-              <div className="space-y-2">
-                <label className="block font-label text-[10px] font-bold uppercase tracking-[0.1em] text-on-surface-variant ml-1">Full Name</label>
-                <input 
-                  className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-4 py-3 text-on-surface placeholder:text-outline/50 focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/40 transition-all font-body" 
-                  placeholder="Your name" type="text"
-                  value={name} onChange={e => setName(e.target.value)}
-                />
+              <form className="space-y-7" onSubmit={handleSubmit}>
+                <div className="stagger-in" style={{ animationDelay: '0.1s' }}>
+
+                  {mode === 'signup' && (
+                    <div className="mb-6">
+                      <label className="block text-[10px] font-bold text-white/30 uppercase tracking-[0.25em] mb-3 ml-1">Analyst Identity</label>
+                      <input
+                        type="text"
+                        placeholder="Full name"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        className="w-full auth-input h-14 px-6 rounded-2xl text-white placeholder:text-white/10 focus:ring-0 text-sm premium-transition"
+                      />
+                    </div>
+                  )}
+
+                  <div className="mb-6">
+                    <label className="block text-[10px] font-bold text-white/30 uppercase tracking-[0.25em] mb-3 ml-1">Credentials Target</label>
+                    <input
+                      type="email"
+                      placeholder="identity@intel.verify.ai"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      className="w-full auth-input h-14 px-6 rounded-2xl text-white placeholder:text-white/10 focus:ring-0 text-sm premium-transition"
+                    />
+                  </div>
+
+                  <div className="mb-8">
+                    <label className="block text-[10px] font-bold text-white/30 uppercase tracking-[0.25em] mb-3 ml-1">Access Sequence</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      className="w-full auth-input h-14 px-6 rounded-2xl text-white placeholder:text-white/10 focus:ring-0 text-lg tracking-widest premium-transition"
+                      style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                    />
+                  </div>
+
+                  {error && <p className="text-red-400 text-xs text-center font-semibold mb-4">{error}</p>}
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full h-14 bg-white text-black font-bold rounded-2xl btn-shimmer btn-premium btn-press shadow-xl disabled:opacity-50"
+                  >
+                    {loading ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                        Processing...
+                      </div>
+                    ) : (
+                      mode === 'login' ? 'Initialize Session' : 'Provision Account'
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              <div className="relative my-8">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-white/[0.03]"></div>
+                </div>
+                <div className="relative flex justify-center text-[10px] uppercase tracking-[0.4em] font-bold">
+                  <span className="px-6 bg-[#050608] text-white/10">Security Handshake</span>
+                </div>
               </div>
-            )}
-            
-            <div className="space-y-2">
-              <label className="block font-label text-[10px] font-bold uppercase tracking-[0.1em] text-on-surface-variant ml-1">Email Address</label>
-              <input 
-                className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-4 py-3 text-on-surface placeholder:text-outline/50 focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/40 transition-all font-body" 
-                placeholder="name@company.com" type="email"
-                value={email} onChange={e => setEmail(e.target.value)}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex justify-between items-center ml-1">
-                <label className="block font-label text-[10px] font-bold uppercase tracking-[0.1em] text-on-surface-variant">Password</label>
-                {mode === "login" && (
-                  <a className="font-label text-[10px] font-bold uppercase tracking-[0.1em] text-primary hover:text-primary-container transition-colors" href="#">Forgot Password?</a>
-                )}
-              </div>
-              <input 
-                className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-4 py-3 text-on-surface placeholder:text-outline/50 focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/40 transition-all font-body" 
-                placeholder="••••••••" type="password"
-                value={password} onChange={e => setPassword(e.target.value)}
-              />
-            </div>
 
-            {error && <p className="text-red-500 text-sm font-semibold text-center">{error}</p>}
-            
-            <button 
-              className="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary font-bold py-3.5 rounded-full hover:shadow-[0_0_20px_rgba(128,131,255,0.3)] transform active:scale-[0.98] transition-all duration-200 flex justify-center items-center h-[52px]" 
-              type="submit" disabled={loading}
-            >
-              {loading ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-on-primary border-t-transparent"></div>
-              ) : (mode === "login" ? "Sign in" : "Create Account")}
-            </button>
-          </form>
+              <button
+                type="button"
+                onClick={async () => {
+                  await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: { redirectTo: `${window.location.origin}/` }
+                  })
+                }}
+                className="w-full h-14 border border-white/[0.05] hover:border-white/[0.1] bg-white/[0.02] text-white/70 font-bold rounded-2xl flex items-center justify-center gap-4 premium-transition btn-premium btn-press shadow-inner"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                </svg>
+                Authorize via Google
+              </button>
 
-          <div className="mt-6 flex items-center gap-4">
-            <div className="flex-1 h-px bg-outline-variant/20"></div>
-            <span className="text-[11px] text-on-surface-variant uppercase tracking-widest">or</span>
-            <div className="flex-1 h-px bg-outline-variant/20"></div>
-          </div>
-
-          <button
-            type="button"
-            onClick={async () => {
-              await supabase.auth.signInWithOAuth({
-                provider: 'google',
-                options: { redirectTo: `${window.location.origin}/` }
-              })
-            }}
-            className="mt-4 w-full flex items-center justify-center gap-3 bg-surface-container border border-outline-variant/20 rounded-full py-3.5 text-sm font-semibold text-on-surface hover:bg-surface-container-high transition-all active:scale-[0.98]"
-          >
-            <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-              <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
-              <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
-              <path d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/>
-              <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 6.293C4.672 4.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
-            </svg>
-            Continue with Google
-          </button>
-
-          <div className="mt-6 text-center">
-            <p className="text-on-surface-variant text-sm">
-              {mode === "login" ? "New to the ecosystem? " : "Already have an account? "}
-              <a className="text-primary font-semibold hover:underline underline-offset-4 ml-1 cursor-pointer" onClick={toggleMode}>
-                {mode === "login" ? "Create Account" : "Sign in"}
-              </a>
-            </p>
-          </div>
-        </div>
-
-        {/* Feature Highlights */}
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl w-full">
-          <div className="flex flex-col items-center md:items-start group">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_#ffb783]"></div>
-              <span className="font-headline font-bold text-on-surface text-sm tracking-tight">DistilBERT classifier</span>
+              <p className="mt-8 text-center text-[11px] text-white/20 tracking-wide uppercase font-bold">
+                {mode === 'login' ? 'New analyst?' : 'Already authorized?'}
+                <a
+                  href="#"
+                  onClick={toggleMode}
+                  className="text-white/60 hover:text-white premium-transition ml-1 underline underline-offset-4 decoration-white/10"
+                >
+                  {mode === 'login' ? 'Provision Account' : 'Sign In'}
+                </a>
+              </p>
             </div>
-            <p className="text-on-surface-variant text-xs text-center md:text-left leading-relaxed">High-precision detection with a benchmarked 96.2% F1 score.</p>
-          </div>
-          <div className="flex flex-col items-center md:items-start group">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_#c0c1ff]"></div>
-              <span className="font-headline font-bold text-on-surface text-sm tracking-tight">GPT-4 + Groq</span>
-            </div>
-            <p className="text-on-surface-variant text-xs text-center md:text-left leading-relaxed">Dual-engine inference ensuring verifiable intelligence at scale.</p>
-          </div>
-          <div className="flex flex-col items-center md:items-start group">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_8px_#c3c0ff]"></div>
-              <span className="font-headline font-bold text-on-surface text-sm tracking-tight">RAG-grounded corrections</span>
-            </div>
-            <p className="text-on-surface-variant text-xs text-center md:text-left leading-relaxed">Source-backed validation loops to eliminate algorithmic hallucination.</p>
           </div>
         </div>
       </main>
 
-      <footer className="fixed bottom-0 w-full z-50 pointer-events-none">
-        <div className="flex justify-center gap-8 px-4 py-10 w-full pointer-events-auto">
-          <span className="text-slate-500 font-inter text-xs tracking-wider uppercase">© 2024 VerifyAI. All rights reserved.</span>
-          <div className="hidden sm:flex gap-6">
-            <a className="text-slate-500 font-inter text-xs tracking-wider uppercase hover:text-indigo-200 transition-opacity" href="#">Privacy Policy</a>
-            <a className="text-slate-500 font-inter text-xs tracking-wider uppercase hover:text-indigo-200 transition-opacity" href="#">System Status</a>
-          </div>
-        </div>
-      </footer>
-
-      {/* Aesthetic Decorative Image Elements */}
-      <div className="fixed top-20 right-20 w-64 h-64 opacity-10 pointer-events-none mix-blend-screen">
-        <img className="w-full h-full object-contain" alt="abstract digital topography with glowing indigo lines and geometric data clusters on dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDW6Y2l4o_J-TssnyzkDnBbG9MJXIO3zeJ8W_2k3uSagHtUAE0je4NPpXUPh34E9MyP-0Z2Ng9mlq6TYbTx-eFeaVNSTW2Zg9ePJwgPSnmgz8YU21AeJgFtBvb8gS0MRx7s3dUuu0g55h5WPE_TUmU3cDaThUUSPDEVKpGG2HlHpUIvyelGYe3uK2YQz4VZVnrzH0qkjTzSAi5rbI1rUWLHhJZL6zbG768e9_X9VlxWKXCCAtWAVS1URL4qPtKESgTm181resu_aWs"/>
-      </div>
     </div>
   )
 }

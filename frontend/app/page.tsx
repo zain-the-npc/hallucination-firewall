@@ -79,7 +79,7 @@ export default function Home() {
           />
         </>
       )}
-      <div className="flex-1 h-screen overflow-hidden bg-background relative pl-0 md:pl-64">
+      <div className="flex-1 h-screen overflow-hidden bg-background relative pl-0 md:pl-60">
         <ChatWindow
           sessionId={currentSessionId}
           onSessionCreated={(id) => {

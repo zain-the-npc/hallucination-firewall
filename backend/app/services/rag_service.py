@@ -104,30 +104,40 @@ def search_serper(question: str, status_cb=None) -> Optional[dict]:
 async def search_wikipedia_rest_async(question: str, status_cb=None) -> Optional[dict]:
     try:
         _emit(status_cb, "📖 Searching Wikipedia...")
-
-        term = question.replace("?", "").strip()
+        search_term = question.replace("?", "").strip()
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                f"https://en.wikipedia.org/api/rest_v1/page/summary/{term.replace(' ', '_')}"
+            search_resp = await client.get(
+                "https://en.wikipedia.org/w/api.php",
+                params={
+                    "action": "query",
+                    "list": "search",
+                    "srsearch": search_term,
+                    "format": "json",
+                    "srlimit": 1
+                }
             )
-            if response.status_code != 200:
+            search_data = search_resp.json()
+            search_results = search_data.get("query", {}).get("search", [])
+            if not search_results:
                 return None
-
-        data    = response.json()
+            top_title = search_results[0]["title"]
+            summary_resp = await client.get(
+                f"https://en.wikipedia.org/api/rest_v1/page/summary/{top_title.replace(' ', '_')}"
+            )
+            if summary_resp.status_code != 200:
+                return None
+            data = summary_resp.json()
         extract = data.get("extract", "")
-        title   = data.get("title", "")
-        url     = data.get("content_urls", {}).get("desktop", {}).get("page", "")
-
+        title = data.get("title", "")
+        url = data.get("content_urls", {}).get("desktop", {}).get("page", "")
         if not extract or len(extract) < 50:
             return None
-
         _emit(status_cb, f"✅ Wikipedia found: {title}")
-        print(f"RAG: Wikipedia REST found '{title}'")
         return {
-            "context":  extract,
+            "context": extract,
             "sources": [{
-                "name":    f"Wikipedia — {title}",
-                "url":     url,
+                "name": f"Wikipedia — {title}",
+                "url": url,
                 "snippet": extract[:250] + "..."
             }],
             "provider": "Wikipedia"
@@ -138,36 +148,46 @@ async def search_wikipedia_rest_async(question: str, status_cb=None) -> Optional
 
 
 def search_wikipedia_rest(question: str, status_cb=None) -> Optional[dict]:
-    """Sync Wikipedia REST — kept for knowledge panel compatibility."""
     try:
-        term     = question.replace("?", "").strip()
+        search_term = question.replace("?", "").strip()
         response = requests.get(
-            f"https://en.wikipedia.org/api/rest_v1/page/summary/{term.replace(' ', '_')}",
+            "https://en.wikipedia.org/w/api.php",
+            params={
+                "action": "query",
+                "list": "search",
+                "srsearch": search_term,
+                "format": "json",
+                "srlimit": 1
+            },
             timeout=10
         )
-        if response.status_code != 200:
+        search_results = response.json().get("query", {}).get("search", [])
+        if not search_results:
             return None
-
-        data    = response.json()
+        top_title = search_results[0]["title"]
+        summary = requests.get(
+            f"https://en.wikipedia.org/api/rest_v1/page/summary/{top_title.replace(' ', '_')}",
+            timeout=10
+        )
+        if summary.status_code != 200:
+            return None
+        data = summary.json()
         extract = data.get("extract", "")
-        title   = data.get("title", "")
-        url     = data.get("content_urls", {}).get("desktop", {}).get("page", "")
-
+        title = data.get("title", "")
+        url = data.get("content_urls", {}).get("desktop", {}).get("page", "")
         if not extract or len(extract) < 50:
             return None
-
-        print(f"RAG: Wikipedia REST found '{title}'")
         return {
-            "context":  extract,
+            "context": extract,
             "sources": [{
-                "name":    f"Wikipedia — {title}",
-                "url":     url,
+                "name": f"Wikipedia — {title}",
+                "url": url,
                 "snippet": extract[:250] + "..."
             }],
             "provider": "Wikipedia"
         }
     except Exception as e:
-        print(f"Wikipedia REST failed: {e}")
+        print(f"Wikipedia REST sync failed: {e}")
         return None
 
 

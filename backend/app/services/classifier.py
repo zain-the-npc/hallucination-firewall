@@ -34,36 +34,7 @@ model.to(device)
 
 print("Classifier loaded from HuggingFace.")
 
-def is_factual_query(question: str) -> bool:
-    conversational = {
-        "hey", "hi", "hello", "thanks", "thank you", "ok", "okay",
-        "sure", "got it", "bye", "lol", "haha", "yes", "no", "good",
-        "great", "nice", "cool", "wow", "oh", "ah", "hmm", "alright",
-        "welcome", "please", "sorry", "excuse me", "what", "sup"
-    }
-    q     = question.lower().strip().rstrip("?!.")
-    words = q.split()
 
-    if q in conversational:
-        return False
-    if len(words) == 1:
-        return False
-    if len(words) <= 3 and all(w in conversational for w in words):
-        return False
-
-    question_indicators = [
-        "what", "who", "when", "where", "why", "how", "which",
-        "is", "are", "was", "were", "did", "does", "do", "can",
-        "could", "tell", "explain", "define", "describe", "list",
-        "name", "give", "show", "find", "calculate", "solve"
-    ]
-
-    if any(w in words for w in question_indicators):
-        return True
-    if len(words) >= 5:
-        return True
-
-    return False
 
 
 
@@ -107,20 +78,11 @@ def classify(question: str, answer: str) -> dict:
 
 
 
-    if hallucination_score >= 0.8:
-
+    if hallucination_score >= 0.41:
         confidence_label = "HIGH RISK"
-
-    elif hallucination_score >= 0.6:
-
-        confidence_label = "MEDIUM RISK"
-
-    elif hallucination_score >= 0.4:
-
-        confidence_label = "LOW RISK"
-
+    elif hallucination_score >= 0.26:
+        confidence_label = "UNCERTAIN"
     else:
-
         confidence_label = "LIKELY FACTUAL"
 
 

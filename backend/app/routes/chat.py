@@ -7,7 +7,7 @@ import re
 
 from app.services.gpt_service      import get_gpt_response, verify_with_gpt
 from app.services.gemini_service   import get_gemini_response
-from app.services.classifier       import classify, is_factual_query
+from app.services.classifier       import classify
 from app.services.rag_service      import get_corrected_answer
 from app.services.supabase_service import log_to_supabase
 
@@ -98,21 +98,21 @@ def is_short_answer_query(question: str, answer: str) -> bool:
     short_math = len(answer.split()) <= 2 and any(c.isdigit() for c in answer)
     return yes_no or short_math
 
-def run_firewall_on_answer(question: str, answer: str, status_cb=None) -> dict:
+def run_firewall_on_answer(question: str, answer: str, status_cb=None, primary_model: str = "gpt4") -> dict:
     intent = classify_query_intent(question)
     if intent == "conversational":
         if status_cb:
-            status_cb("ℹ️ Conversational query — verification skipped")
+            status_cb("ℹ️ Conversational query — skipped")
         return {
-            "hallucination_score": 0.0,
-            "factual_score": 1.0,
+            "hallucination_score": None,
+            "factual_score": None,
             "intent": "conversational",
             "skipped": True,
             "answer": answer,
             "sources": [],
             "rag_used": False,
             "badge": "conversational_query",
-            "confidence_label": "CONVERSATIONAL",
+            "confidence_label": None,
             "status": "SKIPPED",
             "corrected_answer": None,
             "gpt_verified": False,
@@ -121,52 +121,19 @@ def run_firewall_on_answer(question: str, answer: str, status_cb=None) -> dict:
             "rag_provider": None
         }
 
-    if is_short_answer_query(question, answer):
+    if _is_gemini_error_response(answer):
         return {
-            "hallucination_score": 0.05,
-            "factual_score": 0.95,
-            "confidence_label": "LIKELY FACTUAL",
-            "status": "PASSED",
+            "hallucination_score": None,
+            "factual_score": None,
+            "confidence_label": "UNAVAILABLE",
+            "status": "UNAVAILABLE",
             "corrected_answer": None,
             "sources": [],
             "rag_used": False,
             "gpt_verified": False,
             "gpt_verdict": None,
             "gpt_reasoning": None,
-            "rag_provider": None,
-            "badge": "short_answer",
-            "skipped": False,
-            "intent": "factual"
-        }
-
-    if _is_gemini_error_response(answer):
-        return {
-            "hallucination_score": None,
-            "factual_score":       None,
-            "confidence_label":    "UNAVAILABLE",
-            "status":              "UNAVAILABLE",
-            "corrected_answer":    None,
-            "sources":             [],
-            "rag_used":            False,
-            "gpt_verified":        False,
-            "gpt_verdict":         None,
-            "gpt_reasoning":       None,
-            "rag_provider":        None
-        }
-
-    if not is_factual_query(question):
-        return {
-            "hallucination_score": 0.0,
-            "factual_score":       1.0,
-            "confidence_label":    "CONVERSATIONAL",
-            "status":              "SKIPPED",
-            "corrected_answer":    None,
-            "sources":             [],
-            "rag_used":            False,
-            "gpt_verified":        False,
-            "gpt_verdict":         None,
-            "gpt_reasoning":       None,
-            "rag_provider":        None
+            "rag_provider": None
         }
 
     if status_cb:
@@ -174,26 +141,10 @@ def run_firewall_on_answer(question: str, answer: str, status_cb=None) -> dict:
 
     clf = classify(question, answer)
     score = clf["hallucination_score"]
-    confidence_label = recalculate_confidence_label(score)
 
-    print(f"[CLASSIFIER] score={score:.3f} label={confidence_label}")
+    print(f"[CLASSIFIER] score={score:.3f}")
 
-    primary_model = "gpt4"
-    import gc, inspect
-    for obj in gc.get_objects():
-        if inspect.iscoroutine(obj) and obj.cr_frame and obj.cr_frame.f_code.co_name in ('chat_stream', 'chat'):
-            locs = obj.cr_frame.f_locals
-            if locs.get('gpt_answer') == answer:
-                primary_model = "gpt4"
-                break
-            if locs.get('gemini_answer') == answer:
-                primary_model = "gemini"
-                break
-            if locs.get('model_used') in ('gpt4', 'gemini'):
-                primary_model = locs.get('model_used')
-                break
 
-    # Always run RAG
     if status_cb:
         status_cb("🔍 Searching web sources...")
     rag_result = get_corrected_answer(question, status_cb)
@@ -202,7 +153,6 @@ def run_firewall_on_answer(question: str, answer: str, status_cb=None) -> dict:
     rag_used = rag_result.get("rag_used", False)
     rag_provider = rag_result.get("provider") if rag_used else None
 
-    # Always run counter model cross-check
     if status_cb:
         status_cb("🤔 Getting second opinion from counter model...")
     if primary_model == "gpt4":
@@ -222,7 +172,8 @@ def run_firewall_on_answer(question: str, answer: str, status_cb=None) -> dict:
             )
             text = response.choices[0].message.content
             verification = json.loads(text.replace("```json", "").replace("```", "").strip())
-        except:
+        except Exception as e:
+            print(f"[GROQ VERIFY ERROR] {e}")
             verification = {"is_hallucination": False, "confidence": 0.5, "reasoning": "Groq verification failed", "verdict": "UNCERTAIN"}
     else:
         verification = verify_with_gpt(question, answer)
@@ -231,14 +182,22 @@ def run_firewall_on_answer(question: str, answer: str, status_cb=None) -> dict:
     gpt_verdict = verification.get("verdict")
     gpt_reasoning = verification.get("reasoning")
 
-    # Score determines label only
+    cross_check_flagged = verification.get("is_hallucination", False)
+    cross_check_confidence = verification.get("confidence", 0.5)
+
+    if cross_check_flagged:
+        combined_score = (score + cross_check_confidence) / 2
+        combined_score = max(combined_score, UNCERTAIN_LOW + 0.05)
+    else:
+        combined_score = score * 0.8
+    score = round(min(combined_score, 1.0), 4)
+
+    confidence_label = recalculate_confidence_label(score)
+
     if score >= UNCERTAIN_HIGH:
         status = "FLAGGED"
     elif score >= UNCERTAIN_LOW:
-        if verification.get("is_hallucination"):
-            status = "FLAGGED"
-        else:
-            status = "VERIFIED"
+        status = "FLAGGED" if cross_check_flagged else "VERIFIED"
     else:
         status = "PASSED"
 
@@ -253,7 +212,9 @@ def run_firewall_on_answer(question: str, answer: str, status_cb=None) -> dict:
         "gpt_verified": gpt_verified,
         "gpt_verdict": gpt_verdict,
         "gpt_reasoning": gpt_reasoning,
-        "rag_provider": rag_provider
+        "rag_provider": rag_provider,
+        "intent": intent,
+        "skipped": False
     }
 
 
@@ -328,13 +289,13 @@ async def chat_stream(request: ChatRequest):
             yield send("🛡️ Running hallucination firewall...")
             pending = []
             result  = await loop.run_in_executor(
-                None, run_firewall_on_answer, question, answer, lambda m: pending.append(m)
+                None, run_firewall_on_answer, question, answer, lambda m: pending.append(m), model_used
             )
             for s in pending:
                 yield f"data: {json.dumps({'type': 'status', 'message': s})}\n\n"
 
             knowledge = None
-            if is_factual_query(question):
+            if len(question.split()) >= 3:
                 yield send("🔎 Fetching knowledge panel...")
                 knowledge = await loop.run_in_executor(None, get_knowledge_panel, question)
 
@@ -377,7 +338,7 @@ async def chat_stream(request: ChatRequest):
             yield send("🛡️ Scoring GPT-4...")
             gpt_p  = []
             gpt_r  = await loop.run_in_executor(
-                None, run_firewall_on_answer, question, gpt_answer, lambda m: gpt_p.append(m)
+                None, run_firewall_on_answer, question, gpt_answer, lambda m: gpt_p.append(m), "gpt4"
             )
             for s in gpt_p:
                 yield f"data: {json.dumps({'type': 'status', 'message': s})}\n\n"
@@ -385,19 +346,22 @@ async def chat_stream(request: ChatRequest):
             yield send("⚖️ Scoring Groq...")
             gem_p  = []
             gem_r  = await loop.run_in_executor(
-                None, run_firewall_on_answer, question, gemini_answer, lambda m: gem_p.append(m)
+                None, run_firewall_on_answer, question, gemini_answer, lambda m: gem_p.append(m), "gemini"
             )
             for s in gem_p:
                 yield f"data: {json.dumps({'type': 'status', 'message': s})}\n\n"
 
             knowledge = None
-            if is_factual_query(question):
+            intent = classify_query_intent(question)
+            if intent not in ["conversational"] and len(question.split()) >= 3:
                 yield send("🔎 Fetching knowledge panel...")
                 knowledge = await loop.run_in_executor(None, get_knowledge_panel, question)
 
             gpt_score = gpt_r["hallucination_score"]
             gem_score = gem_r["hallucination_score"]
             
+            gpt_score = gpt_score if gpt_score is not None else 1.0
+            gem_score = gem_score if gem_score is not None else 1.0
             if gpt_score < gem_score:
                 winner = "gpt4"
                 winner_reason = f"GPT-4 scored lower hallucination risk ({round(gpt_score*100)}% vs {round(gem_score*100)}%)"
@@ -473,7 +437,8 @@ async def chat(request: ChatRequest):
     if mode == "firewall":
         answer    = get_gemini_response(question, request.messages) if model_used == "gemini" else get_gpt_response(question, request.messages)
         result    = run_firewall_on_answer(question, answer)
-        knowledge = get_knowledge_panel(question) if is_factual_query(question) else None
+        intent    = result.get("intent") or classify_query_intent(question)
+        knowledge = get_knowledge_panel(question) if intent not in ["conversational"] and len(question.split()) >= 3 else None
         log_to_supabase(
             user_question=question, gpt_raw_answer=answer,
             hallucination_score=result["hallucination_score"], status=result["status"],
@@ -505,8 +470,8 @@ async def chat(request: ChatRequest):
             corrected_answer=gpt_result["corrected_answer"], sources=[]
         )
         
-        gpt_score = gpt_result["hallucination_score"]
-        gem_score = gemini_result["hallucination_score"]
+        gpt_score = gpt_result["hallucination_score"] if gpt_result["hallucination_score"] is not None else 1.0
+        gem_score = gemini_result["hallucination_score"] if gemini_result["hallucination_score"] is not None else 1.0
         
         if gpt_score < gem_score:
             winner = "gpt4"
