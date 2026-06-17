@@ -53,7 +53,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-background text-on-surface flex overflow-hidden">
+    <main className="min-h-screen bg-background text-on-surface flex overflow-hidden max-w-full overflow-x-hidden">
       {user && (
         <>
           {isSidebarOpen && (
@@ -79,7 +79,7 @@ export default function Home() {
           />
         </>
       )}
-      <div className="flex-1 h-screen overflow-hidden bg-background relative pl-0 md:pl-60">
+      <div className="flex-1 h-screen overflow-hidden bg-background relative pl-0 md:pl-60 max-w-full overflow-x-hidden">
         <ChatWindow
           sessionId={currentSessionId}
           onSessionCreated={(id) => {

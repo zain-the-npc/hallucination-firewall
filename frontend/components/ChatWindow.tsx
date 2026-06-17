@@ -6,9 +6,12 @@ import { createSession, getSession, updateSession, generateTitle } from "../lib/
 import ConfidenceMeter from "./ConfidenceMeter"
 import FirewallBadge from "./FirewallBadge"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 type Mode = "chat" | "firewall" | "compare"
 type Model = "gpt4" | "gemini"
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface Source { name: string; url: string; snippet: string }
 
@@ -41,7 +44,7 @@ interface Message {
 
 interface Props {
   sessionId: string | null
-  onSessionCreated: (id: string) => void
+  onSessionCreated: (id: string | null) => void
   userId: string
   user?: any
   onToggleSidebar?: () => void
@@ -68,7 +71,7 @@ async function askFirewallStream(
   messages: any[],
   onStatus: (msg: string) => void
 ): Promise<any> {
-  const response = await fetch("https://verifyai.up.railway.app/api/chat/stream", {
+  const response = await fetch(`${BASE_URL}/api/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, mode, model, messages }),
@@ -111,7 +114,7 @@ async function askFirewallStream(
 
 // ─── Fallback non-streaming call ─────────────────────────────────────────────
 async function askFirewallSync(question: string, mode: string, model: string, messages: any[]): Promise<any> {
-  const response = await fetch("https://verifyai.up.railway.app/api/chat", {
+  const response = await fetch(`${BASE_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, mode, model, messages }),
@@ -143,20 +146,26 @@ function RiskBar({ score }: { score: number }) {
 }
 
 export default function ChatWindow({ sessionId, onSessionCreated, userId, user, onToggleSidebar }: Props) {
+  const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
   const [question, setQuestion] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<Mode>("chat")
+  const [mode, setMode] = useState<Mode | null>(null)
   const [model, setModel] = useState<Model>("gpt4")
   const [statusMsg, setStatusMsg] = useState<string>("")   // live status
   const [statusHistory, setStatusHistory] = useState<string[]>([]) // all statuses
+  const [warningMsg, setWarningMsg] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (sessionId) loadSession()
-    else setMessages([])
+    if (sessionId) {
+      loadSession()
+    } else {
+      setMessages([])
+      setMode(null)
+    }
   }, [sessionId])
 
   useEffect(() => {
@@ -165,12 +174,30 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
 
   async function loadSession() {
     if (!sessionId) return
-    try { setMessages((await getSession(sessionId)).messages || []) }
+    try {
+      const sessionData = await getSession(sessionId)
+      setMessages(sessionData.messages || [])
+      if (sessionData.mode) {
+        setMode(sessionData.mode as Mode)
+      }
+    }
     catch (e) { console.error(e) }
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) {
+    console.log("handleSubmit called. Event:", e);
+    if (e) e.preventDefault()
     if (!question.trim() || loading) return
+
+    const activeMode = mode;
+    if (!activeMode) {
+      setWarningMsg("Please select a mode first — Quick Answer, Verified Research, or Model Comparison")
+      setTimeout(() => {
+        setWarningMsg(null)
+      }, 3000)
+      return
+    }
+
     const q = question.trim()
     setQuestion("")
     setLoading(true)
@@ -178,12 +205,12 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
     setStatusMsg("")
     setStatusHistory([])
 
-    const userMsg: Message = { role: "user", question: q, mode, timestamp: new Date().toISOString() }
+    const userMsg: Message = { role: "user", question: q, mode: activeMode, timestamp: new Date().toISOString() }
     const updated = [...messages, userMsg]
     setMessages(updated)
 
     try {
-      const selectedModel = mode === "compare" ? "gpt4" : model
+      const selectedModel = activeMode === "compare" ? "gpt4" : model
 
       const historyPayload = messages.map(m => {
         let content = m.role === "user" ? m.question
@@ -191,11 +218,12 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
         return { role: m.role, content: content || "" };
       });
 
-      const data = await askFirewallStream(q, mode, selectedModel, historyPayload, (msg) => {
+      console.log("Calling askFirewallStream with:", { q, activeMode, selectedModel });
+      const data = await askFirewallStream(q, activeMode, selectedModel, historyPayload, (msg) => {
         setStatusMsg(msg)
         setStatusHistory(prev => [...prev, msg])
       })
-      console.log("STREAM RESULT intent:", data.intent, "status:", data.status)
+      console.log("STREAM RESULT success, intent:", data.intent, "status:", data.status, "data:", data)
 
       const aMsg: Message = {
         role: "assistant",
@@ -231,11 +259,12 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
         await updateSession(sessionId, final)
       } else {
         const title = generateTitle(q)
-        const s = await createSession(title, userId, mode)
+        const s = await createSession(title, userId, activeMode)
         await updateSession(s.id, final, title)
         onSessionCreated(s.id)
       }
-    } catch {
+    } catch (err) {
+      console.error("askFirewallStream error:", err);
       setError("Could not reach backend. Ensure the server is running on :8000")
       setMessages(updated.slice(0, -1))
       setStatusMsg("")
@@ -246,7 +275,11 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
   }
 
   function handleKey(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) handleSubmit()
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleSubmit();
+    }
   }
 
 
@@ -358,15 +391,35 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
 
       {/* Header */}
       <header className="h-16 px-6 md:px-12 flex items-center justify-between sticky top-0 z-40 relative" style={{ background: 'rgba(5,6,8,0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-        <div className="flex items-center gap-6 h-full">
+        <div className="flex items-center gap-2 md:gap-6 h-full">
           <button
             id="open-sidebar-btn"
             onClick={onToggleSidebar}
-            className="hidden p-2 text-white/30 hover:text-white hover:bg-white/5 rounded-md transition-all min-h-[44px] min-w-[44px] items-center justify-center"
+            className="flex md:hidden p-2 text-white/30 hover:text-white hover:bg-white/5 rounded-md transition-all min-h-[40px] min-w-[40px] items-center justify-center"
             aria-label="Toggle Menu"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 12h18M3 6h18M3 18h18" /></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <line x1="4" y1="18" x2="20" y2="18" />
+            </svg>
           </button>
+          {(messages.length > 0 || sessionId !== null) && (
+            <button
+              onClick={() => {
+                setMessages([])
+                onSessionCreated(null)
+                router.push('/')
+              }}
+              className="p-2 text-white/40 hover:text-white transition-all min-h-[40px] min-w-[40px] flex items-center justify-center rounded-md hover:bg-white/5"
+              aria-label="Back"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+            </button>
+          )}
           <nav className="flex gap-6 h-full items-center">
             <button
               onClick={() => { setModel("gpt4"); setMode("chat") }}
@@ -729,12 +782,13 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
                 type="text"
               />
               <div className="flex items-center gap-2">
-                <button className="p-2 text-white/30 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
+                <button type="button" className="p-2 text-white/30 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
                   {/* Paperclip icon */}
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
                 </button>
                 <button
                   id="send-btn"
+                  type="button"
                   onClick={handleSubmit}
                   disabled={loading || !question.trim()}
                   className="w-10 h-10 bg-white hover:bg-emerald-400 text-black rounded-lg flex items-center justify-center transition-all btn-press shadow-lg disabled:opacity-50"
@@ -745,6 +799,11 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
               </div>
             </div>
           </div>
+          {warningMsg && (
+            <p className="text-xs text-red-500 font-semibold text-center mt-2 animate-pulse">
+              {warningMsg}
+            </p>
+          )}
           <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.4em] text-center mt-3 shimmer-text">VERIFYAI CAN MAKE MISTAKES. VERIFY CRITICAL INFORMATION.</p>
         </div>
       </footer>

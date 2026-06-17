@@ -23,6 +23,8 @@ export default function ChatBox() {
   const [result, setResult] = useState<Result | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [history, setHistory] = useState<Result[]>([])
+  const mode: string | null = null
+  const [warningMsg, setWarningMsg] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const resultRef = useRef<HTMLDivElement>(null)
 
@@ -32,8 +34,18 @@ export default function ChatBox() {
     }
   }, [result])
 
-  async function handleSubmit() {
+  async function handleSubmit(e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) {
+    if (e) e.preventDefault()
     if (!question.trim() || loading) return
+
+    if (!mode) {
+      setWarningMsg("Please select a mode first — Quick Answer, Verified Research, or Model Comparison")
+      setTimeout(() => {
+        setWarningMsg(null)
+      }, 3000)
+      return
+    }
+
     setLoading(true)
     setError(null)
     setResult(null)
@@ -42,7 +54,7 @@ export default function ChatBox() {
       const data = await askFirewall(question.trim())
       setResult(data)
       setHistory(prev => [data, ...prev].slice(0, 10))
-    } catch (e) {
+    } catch {
       setError("Failed to reach the firewall. Is the backend running?")
     } finally {
       setLoading(false)
@@ -50,7 +62,11 @@ export default function ChatBox() {
   }
 
   function handleKey(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) handleSubmit()
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleSubmit();
+    }
   }
 
   const exampleQuestions = [
@@ -77,6 +93,7 @@ export default function ChatBox() {
                      outline-none text-base"
         />
         <button
+          type="button"
           onClick={handleSubmit}
           disabled={loading || !question.trim()}
           className="px-6 py-3 rounded-xl font-semibold text-sm
@@ -93,6 +110,12 @@ export default function ChatBox() {
           ) : "Send →"}
         </button>
       </div>
+
+      {warningMsg && (
+        <p className="text-xs text-red-500 font-semibold text-center mt-2 mb-4 animate-pulse">
+          {warningMsg}
+        </p>
+      )}
 
       {/* Example Questions */}
       {!result && !loading && (

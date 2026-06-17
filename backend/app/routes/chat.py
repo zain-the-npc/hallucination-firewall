@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 import json
 import re
+import os
 
 from app.services.gpt_service      import get_gpt_response, verify_with_gpt
 from app.services.gemini_service   import get_gemini_response
@@ -404,7 +405,11 @@ async def chat_stream(request: ChatRequest):
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": os.getenv("FRONTEND_URL", "http://localhost:3000"),
+        }
     )
 
 

@@ -25,8 +25,13 @@ def log_to_supabase(
             "created_at":         datetime.utcnow().isoformat()
         }
 
-        result = supabase.table("hallucination_logs").insert(data).execute()
-        return result
+        try:
+            result = supabase.table("hallucination_logs").insert(data).execute()
+            return result
+        except Exception as e:
+            if "row-level security" in str(e).lower() or "rls" in str(e).lower():
+                return None
+            raise e
 
     except Exception as e:
         print(f"Supabase logging error: {e}")
