@@ -119,13 +119,9 @@ export default function AuthPage() {
           <div className="auth-card">
             <div className="auth-card-inner">
               <div className="flex flex-col items-center mb-8">
-                <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center mb-8 shadow-2xl backdrop-blur-md">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5">
-                    <path d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
-                  </svg>
-                </div>
-                <h2 className="text-4xl text-white tracking-tighter mb-3 font-extrabold">SECURE ACCESS</h2>
-                <p className="text-white/20 text-xs uppercase tracking-[0.2em] font-bold">Verification Level 4 • Protocol Active</p>
+
+                <h2 className="text-4xl text-white tracking-tighter mb-3 font-extrabold"> AUTHENTICATE</h2>
+                <p className="text-white/20 text-xs uppercase tracking-[0.2em] font-bold"> Sign in to your VerifyAI account </p>
               </div>
 
               <form className="space-y-7" onSubmit={handleSubmit}>
