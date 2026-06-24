@@ -90,7 +90,7 @@ export default function AuthPage() {
   }, [mode]);
 
   return (
-    <div className="auth-page relative flex flex-col" style={{ height: '100vh', overflow: 'hidden', background: '#020305' }}>
+    <div className="auth-page relative flex flex-col w-full min-h-screen" style={{ height: '100dvh', overflow: 'hidden', background: '#020305' }}>
       {/* Cursor Dot */}
       <div ref={dotRef} className="cursor-dot" />
 
@@ -114,7 +114,7 @@ export default function AuthPage() {
       </header>
 
       {/* Main Login Section */}
-      <main className="flex-1 flex items-center justify-center p-6 relative z-10">
+      <main className="flex-1 flex items-center justify-center w-full p-6 relative z-10">
         <div className="w-full max-w-[500px]">
           <div className="auth-card">
             <div className="auth-card-inner">

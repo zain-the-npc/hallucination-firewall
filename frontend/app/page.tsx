@@ -58,7 +58,7 @@ export default function Home() {
         <>
           {isSidebarOpen && (
             <div 
-              className="fixed inset-0 bg-black/80 z-40 md:hidden" 
+              className="fixed inset-0 bg-black/80 z-[55] md:hidden" 
               onClick={() => setIsSidebarOpen(false)} 
             />
           )}
@@ -79,7 +79,7 @@ export default function Home() {
           />
         </>
       )}
-      <div className="flex-1 h-screen overflow-hidden bg-background relative pl-0 md:pl-60 max-w-full overflow-x-hidden">
+      <div className="flex-1 h-dvh overflow-hidden bg-background relative pl-0 md:pl-60 max-w-full overflow-x-hidden">
         <ChatWindow
           sessionId={currentSessionId}
           onSessionCreated={(id) => {
@@ -88,6 +88,7 @@ export default function Home() {
           userId={user?.id}
           user={user}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          isSidebarOpen={isSidebarOpen}
         />
       </div>
     </main>

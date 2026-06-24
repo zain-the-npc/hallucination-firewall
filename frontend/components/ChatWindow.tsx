@@ -48,6 +48,7 @@ interface Props {
   userId: string
   user?: any
   onToggleSidebar?: () => void
+  isSidebarOpen?: boolean
 }
 
 const MODES = [
@@ -145,7 +146,7 @@ function RiskBar({ score }: { score: number }) {
   )
 }
 
-export default function ChatWindow({ sessionId, onSessionCreated, userId, user, onToggleSidebar }: Props) {
+export default function ChatWindow({ sessionId, onSessionCreated, userId, user, onToggleSidebar, isSidebarOpen }: Props) {
   const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
   const [question, setQuestion] = useState("")
@@ -381,7 +382,7 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
   const modeColor = mode === "firewall" ? "var(--accent)" : mode === "compare" ? "var(--purple)" : "var(--text-2)"
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden relative font-headline bg-background text-on-surface w-full" style={{ cursor: 'aùto' }}>
+    <div className="flex flex-col h-dvh overflow-hidden relative font-headline bg-background text-on-surface w-full" style={{ cursor: 'aùto' }}>
       {/* Cursor */}
 
       {/* Noise Overlay */}
@@ -451,13 +452,13 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
       </header>
 
       {/* Central Content Canvas */}
-      <section className="flex-1 overflow-y-auto px-4 md:px-12 py-8 md:py-16 flex flex-col items-center custom-scroll w-full">
+      <section className="flex-1 overflow-y-auto px-4 md:px-12 pt-8 pb-72 md:py-16 flex flex-col items-center custom-scroll w-full">
         {messages.length === 0 ? (
           <div className="w-full flex flex-col items-center justify-center" style={{ position: 'relative', zIndex: 1, minHeight: '70vh' }}>
             <div className="mesh-background" />
             <div className="max-w-4xl w-full flex flex-col items-center">
               <div className="mb-4">
-                <h2 className="typewriter font-cabinet text-5xl md:text-6xl text-white tracking-tighter" style={{ fontWeight: 900 }}>Refine your Intelligence</h2>
+                <h2 className="typewriter font-cabinet text-2xl sm:text-4xl md:text-6xl text-white tracking-tighter" style={{ fontWeight: 900 }}>Refine your Intelligence</h2>
               </div>
               <p className="text-white/40 text-lg mb-16 stagger-in" style={{ animationDelay: '0.1s' }}>AI answers, human-grade verification.</p>
 
@@ -768,8 +769,11 @@ export default function ChatWindow({ sessionId, onSessionCreated, userId, user, 
       </section>
 
       {/* Input Area (Fixed Bottom) */}
-      <footer className="p-6 md:p-8 flex flex-col items-center gap-4 fixed bottom-0 right-0 left-0 md:left-60 z-50 pointer-events-none">
-        <div className="max-w-3xl w-full pointer-events-auto">
+      <footer 
+        className={`px-6 py-4 md:py-6 flex flex-col items-center gap-2 fixed bottom-0 right-0 z-50 bg-[#080A0E] border-t transition-all duration-300 ${isSidebarOpen ? 'left-[240px]' : 'left-0'} md:left-60`}
+        style={{ borderColor: 'rgba(255,255,255,0.05)' }}
+      >
+        <div className="max-w-3xl w-full">
           <div className="input-focus-glow bg-[#0D0E12] border border-white/10 rounded-xl overflow-hidden shadow-2xl transition-all duration-300">
             <div className="flex items-center px-4 py-2">
               <input

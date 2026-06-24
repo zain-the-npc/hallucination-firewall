@@ -93,7 +93,7 @@ export default function Sidebar({ currentSessionId, onSelectSession, onNewChat, 
   return (
     <aside
       id="sidebar"
-      className={`fixed inset-y-0 left-0 z-50 flex flex-col transition-transform duration-300 md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      className={`fixed inset-y-0 left-0 z-[60] flex flex-col transition-transform duration-300 md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       style={{ width: '240px', background: '#080A0E', borderRight: '1px solid rgba(255,255,255,0.05)', height: '100dvh' }}
     >
       {/* Logo + close */}
@@ -156,17 +156,21 @@ export default function Sidebar({ currentSessionId, onSelectSession, onNewChat, 
       </nav>
 
       {/* User / Logout */}
-      <div className="p-6 border-t flex items-center justify-between" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-emerald-400" style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)' }}>
+      <div className="relative z-10 bg-[#080A0E] p-6 border-t flex items-center justify-between gap-4" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-emerald-400 shrink-0" style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)' }}>
             {(user?.user_metadata?.full_name || user?.email || "U")?.[0]?.toUpperCase()}
           </div>
-          <div>
-            <p className="text-xs font-bold text-white">{user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'User'}</p>
-            <p className="text-[10px] text-white/40">Enterprise Tier</p>
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-white truncate">{user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'User'}</p>
+            <p className="text-[10px] text-white/40 truncate">Enterprise Tier</p>
           </div>
         </div>
-        <button onClick={signOut} className="text-white/40 hover:text-white transition-colors p-1" title="Logout">
+        <button 
+          onClick={signOut} 
+          className="flex items-center justify-center w-11 h-11 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors shrink-0" 
+          title="Logout"
+        >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
           </svg>
