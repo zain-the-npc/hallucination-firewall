@@ -31,7 +31,7 @@ LLMs like GPT-4 and LLaMA confidently state wrong facts with the same tone as ri
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture 
 
 ```
 User Question
